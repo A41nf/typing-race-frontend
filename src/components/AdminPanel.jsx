@@ -19,6 +19,7 @@ function buildRows(count, existingRows = []) {
 export default function AdminPanel({
   adminToken,
   connectedPlayers,
+  liveProgress,
   onConnectAdmin,
   onStartRace,
   onBack,
@@ -61,6 +62,7 @@ export default function AdminPanel({
     () => connectedPlayers.filter((player) => player.ready).length,
     [connectedPlayers]
   );
+  const hasLiveProgress = Object.keys(liveProgress || {}).length > 0;
 
   function handleCountChange(nextCount) {
     const safeCount = Math.max(2, Math.min(20, Number(nextCount) || 2));
@@ -223,6 +225,64 @@ export default function AdminPanel({
                 ))}
               </div>
             </section>
+
+            {hasLiveProgress && (
+              <section className="glass-strong rounded-3xl p-6" dir="rtl">
+                <h2 className="text-xl font-bold text-white">تقدم السباق المباشر</h2>
+                <p className="mt-1 text-sm text-white/45">متابعة حيّة لتقدم اللاعبين أثناء السباق وبعد انتهائه.</p>
+
+                <div className="mt-5 space-y-3">
+                  {connectedPlayers.map((player) => {
+                    const stats = liveProgress[player.playerId] || {};
+                    const progressValue = Math.max(0, Math.min(100, stats.progress || 0));
+
+                    return (
+                      <div
+                        key={player.playerId}
+                        className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{player.avatar || "🧑‍🎓"}</span>
+                          <div className="flex-1">
+                            <div className="font-semibold text-white">{player.name}</div>
+                            <div className="text-xs text-white/35" dir="ltr">
+                              {player.playerId}
+                            </div>
+                          </div>
+                          {stats.finished && (
+                            <div className="rounded-xl border border-amber-400/30 bg-amber-400/15 px-3 py-1 text-xs font-bold text-amber-200">
+                              أنهى السباق
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-4">
+                          <div className="mb-2 flex items-center justify-between text-xs text-white/55">
+                            <span>التقدم</span>
+                            <span>{progressValue}%</span>
+                          </div>
+                          <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-l from-brand-500 to-emerald-400 transition-all duration-300"
+                              style={{ width: `${progressValue}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <div className="rounded-xl border border-brand-500/20 bg-brand-500/10 px-3 py-1.5 text-xs font-bold text-brand-100">
+                            {`${stats.wpm || 0} WPM`}
+                          </div>
+                          <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-100">
+                            {`${stats.accuracy || 0}% دقة`}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <section className="glass-strong rounded-3xl p-6">
               <h2 className="text-xl font-bold text-white">بدء السباق</h2>

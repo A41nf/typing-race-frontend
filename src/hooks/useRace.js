@@ -117,6 +117,7 @@ export function useRace() {
         setRoomId(ack.roomId || null);
         setRoomPlayers(ack.players || []);
         setRoomStatus(ack.status || "waiting");
+        setLiveProgress({});
       });
     };
 
@@ -223,8 +224,11 @@ export function useRace() {
           ...prev,
           [data.playerId]: {
             ...(prev[data.playerId] || {}),
+            progress: 100,
+            wpm: data.stats?.wpm ?? prev[data.playerId]?.wpm ?? 0,
+            accuracy: data.stats?.accuracy ?? prev[data.playerId]?.accuracy ?? 0,
+            score: data.stats?.score ?? prev[data.playerId]?.score ?? 0,
             finished: true,
-            ...data.stats,
           },
         }));
       })

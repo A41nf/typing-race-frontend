@@ -56,6 +56,7 @@ export default function App() {
           <AdminPanel
             adminToken={race.adminToken}
             connectedPlayers={race.roomPlayers}
+            liveProgress={race.liveProgress}
             onConnectAdmin={race.connectAdmin}
             onStartRace={race.startRace}
             onBack={race.goHome}
