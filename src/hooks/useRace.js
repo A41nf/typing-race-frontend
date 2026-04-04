@@ -22,6 +22,7 @@ export function useRace() {
   const [liveProgress, setLiveProgress] = useState({});
   const [raceResults, setRaceResults] = useState(null);
   const [standings, setStandings] = useState([]);
+  const [adminStandings, setAdminStandings] = useState([]);
 
   const { connected, connect, disconnect, emit, on } = useSocket();
 
@@ -52,6 +53,7 @@ export function useRace() {
     setLiveProgress({});
     setRaceResults(null);
     setStandings([]);
+    setAdminStandings([]);
     typedRef.current = "";
     correctRef.current = 0;
     totalKeysRef.current = 0;
@@ -118,6 +120,7 @@ export function useRace() {
         setRoomPlayers(ack.players || []);
         setRoomStatus(ack.status || "waiting");
         setLiveProgress({});
+        setAdminStandings([]);
       });
     };
 
@@ -196,6 +199,7 @@ export function useRace() {
         totalKeysRef.current = 0;
         startTimeRef.current = null;
         setLiveProgress({});
+        setAdminStandings([]);
 
         if (mode === "player") {
           setScreen(SCREEN.RACE);
@@ -237,6 +241,7 @@ export function useRace() {
     cleanups.push(
       on(ON.RACE_END, (data) => {
         setStandings(data.standings || []);
+        setAdminStandings(data.standings || []);
         setRaceResults(data);
         if (mode === "player") {
           setScreen(SCREEN.RESULTS);
@@ -260,8 +265,15 @@ export function useRace() {
   }, [emit]);
 
   const startRace = useCallback(() => {
+    setAdminStandings([]);
+    setLiveProgress({});
     emit(EMIT.ADMIN_START_RACE, { adminToken }, () => {});
   }, [emit, adminToken]);
+
+  const newRace = useCallback(() => {
+    setAdminStandings([]);
+    setLiveProgress({});
+  }, []);
 
   const handleTyping = useCallback(
     (newTyped) => {
@@ -334,6 +346,7 @@ export function useRace() {
     setRaceTextId(null);
     setRaceResults(null);
     setStandings([]);
+    setAdminStandings([]);
     setLiveProgress({});
     setCountdownValue(null);
     typedRef.current = "";
@@ -377,6 +390,8 @@ export function useRace() {
     liveProgress,
     raceResults,
     standings,
+    adminStandings,
+    newRace,
     restart,
     connected,
   };

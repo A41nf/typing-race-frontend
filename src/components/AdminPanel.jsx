@@ -20,8 +20,10 @@ export default function AdminPanel({
   adminToken,
   connectedPlayers,
   liveProgress,
+  adminStandings,
   onConnectAdmin,
   onStartRace,
+  onNewRace,
   onBack,
 }) {
   const [playerCount, setPlayerCount] = useState(2);
@@ -63,6 +65,28 @@ export default function AdminPanel({
     [connectedPlayers]
   );
   const hasLiveProgress = Object.keys(liveProgress || {}).length > 0;
+  const safeAdminStandings = adminStandings || [];
+  const hasAdminStandings = safeAdminStandings.length > 0;
+
+  function getRankBadge(rank) {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return rank;
+  }
+
+  function getRankColors(rank) {
+    if (rank === 1) {
+      return "border-amber-400/30 bg-amber-400/10";
+    }
+    if (rank === 2) {
+      return "border-slate-300/30 bg-slate-300/10";
+    }
+    if (rank === 3) {
+      return "border-orange-500/30 bg-orange-500/10";
+    }
+    return "border-white/10 bg-white/5";
+  }
 
   function handleCountChange(nextCount) {
     const safeCount = Math.max(2, Math.min(20, Number(nextCount) || 2));
@@ -280,6 +304,85 @@ export default function AdminPanel({
                       </div>
                     );
                   })}
+                </div>
+              </section>
+            )}
+
+            {hasAdminStandings && (
+              <section className="glass-strong rounded-3xl p-6" dir="rtl">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">نتائج السباق النهائية</h2>
+                    <p className="mt-1 text-sm text-white/45">الترتيب النهائي للاعبين بعد انتهاء السباق.</p>
+                  </div>
+                  <button
+                    onClick={onNewRace}
+                    className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white/85 transition hover:bg-white/10"
+                  >
+                    سباق جديد
+                  </button>
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-3">
+                  {safeAdminStandings.slice(0, 3).map((standing) => (
+                    <div
+                      key={standing.playerId}
+                      className={`rounded-2xl border p-4 ${getRankColors(standing.rank)}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">{standing.avatar || "🧑‍🎓"}</span>
+                          <div>
+                            <div className="font-semibold text-white">{standing.name}</div>
+                            <div className="text-xs text-white/45">{standing.school || "-"}</div>
+                          </div>
+                        </div>
+                        <div className="text-3xl">{getRankBadge(standing.rank)}</div>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-xl bg-white/10 px-3 py-2 text-white/80">{standing.stats?.wpm ?? 0} WPM</div>
+                        <div className="rounded-xl bg-white/10 px-3 py-2 text-white/80">{standing.stats?.accuracy ?? 0}% دقة</div>
+                        <div className="rounded-xl bg-white/10 px-3 py-2 text-white/80">{standing.stats?.score ?? 0} نقطة</div>
+                        <div className="rounded-xl bg-white/10 px-3 py-2 text-white/80">{Math.round(standing.stats?.time ?? 0)}s</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10 bg-white/5">
+                  <table className="min-w-full text-sm text-white/85">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/45">
+                        <th className="px-4 py-3 text-right font-medium">الترتيب</th>
+                        <th className="px-4 py-3 text-right font-medium">اللاعب</th>
+                        <th className="px-4 py-3 text-right font-medium">WPM</th>
+                        <th className="px-4 py-3 text-right font-medium">الدقة</th>
+                        <th className="px-4 py-3 text-right font-medium">النقاط</th>
+                        <th className="px-4 py-3 text-right font-medium">الوقت</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {safeAdminStandings.map((standing) => (
+                        <tr
+                          key={standing.playerId}
+                          className={`border-b border-white/5 last:border-b-0 ${standing.rank <= 3 ? getRankColors(standing.rank) : ""}`}
+                        >
+                          <td className="px-4 py-3 font-bold text-white">{getRankBadge(standing.rank)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{standing.avatar || "🧑‍🎓"}</span>
+                              <span>{standing.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">{standing.stats?.wpm ?? 0}</td>
+                          <td className="px-4 py-3">{standing.stats?.accuracy ?? 0}%</td>
+                          <td className="px-4 py-3">{standing.stats?.score ?? 0}</td>
+                          <td className="px-4 py-3">{Math.round(standing.stats?.time ?? 0)}s</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             )}
