@@ -167,19 +167,22 @@ export function useRace() {
     }
   }, [adminToken, connect, emit]);
 
+  const didJoinRef = useRef(false);
   useEffect(() => {
-    if (mode === "player" && player) {
+    if (!didJoinRef.current && mode === "player" && player) {
+      didJoinRef.current = true;
       joinLobby(roomId);
     }
-  }, [mode, player]);
+  }, [mode, player, joinLobby, roomId]);
 
-  // Restore admin socket connection on refresh
+  // Restore admin socket connection on refresh (runs once on mount)
+  const didRestoreRef = useRef(false);
   useEffect(() => {
-    if (mode === "admin" && adminToken) {
+    if (!didRestoreRef.current && mode === "admin" && adminToken) {
+      didRestoreRef.current = true;
       connectAdmin();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mode, adminToken, connectAdmin]);
 
   useEffect(() => {
     if (!connected) return;
@@ -190,6 +193,9 @@ export function useRace() {
       on(ON.ROOM_UPDATE, (data) => {
         setRoomPlayers(data.players || []);
         setRoomStatus(data.status || "waiting");
+        // Admin never gets RACE_START — detect race state from ROOM_UPDATE
+        if (data.status === "racing") setRaceActive(true);
+        if (data.status === "finished" || data.status === "waiting") setRaceActive(false);
       })
     );
 
