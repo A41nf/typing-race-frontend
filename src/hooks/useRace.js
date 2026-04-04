@@ -4,9 +4,21 @@ import { EMIT, ON, SCREEN } from "../services/contract.js";
 
 const STORAGE_KEY = "typing_race_session";
 
+function saveSession(data) {
+  try {
+    const str = JSON.stringify(data);
+    localStorage.setItem(STORAGE_KEY, str);
+    sessionStorage.setItem(STORAGE_KEY, str);
+    console.log("[Session] Saved:", data);
+  } catch (err) {
+    console.warn("[Session] Save failed:", err);
+  }
+}
+
 function loadSession() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+    console.log("[Session] Load raw:", raw);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -59,6 +71,7 @@ export function useRace() {
 
   const goHome = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
     disconnect();
     setMode(null);
     setRaceActive(false);
@@ -89,24 +102,14 @@ export function useRace() {
     setPlayer(playerData);
     setAuthHeaders(headers);
     setScreen(SCREEN.LOBBY);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        mode: "player", screen: SCREEN.LOBBY,
-        adminToken: "", player: playerData, authHeaders: headers, roomId: null,
-      }));
-    } catch {}
+    saveSession({ mode: "player", screen: SCREEN.LOBBY, adminToken: "", player: playerData, authHeaders: headers, roomId: null });
   }, []);
 
   const loginAdmin = useCallback((token) => {
     setMode("admin");
     setAdminToken(token);
     setScreen(SCREEN.ADMIN_PANEL);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        mode: "admin", screen: SCREEN.ADMIN_PANEL,
-        adminToken: token, player: null, authHeaders: null, roomId: null,
-      }));
-    } catch {}
+    saveSession({ mode: "admin", screen: SCREEN.ADMIN_PANEL, adminToken: token, player: null, authHeaders: null, roomId: null });
   }, []);
 
   const joinLobby = useCallback(
@@ -129,10 +132,8 @@ export function useRace() {
             setRoomId(ack.roomId);
             setRoomPlayers(ack.players || []);
             setRoomStatus(ack.status || "waiting");
-            try {
-              const s = loadSession();
-              if (s) localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...s, roomId: ack.roomId }));
-            } catch {}
+            const s = loadSession();
+            if (s) saveSession({ ...s, roomId: ack.roomId });
           }
         );
       };
