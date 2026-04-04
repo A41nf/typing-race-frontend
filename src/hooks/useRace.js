@@ -47,19 +47,6 @@ export function useRace() {
 
   const { connected, connect, disconnect, emit, on } = useSocket();
 
-  // Persist session to localStorage so refresh restores the correct page
-  useEffect(() => {
-    if (!mode) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
-    }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, screen, adminToken, player, authHeaders, roomId }));
-    } catch {
-      // ignore storage quota errors
-    }
-  }, [mode, screen, adminToken, player, authHeaders, roomId]);
-
   const typedRef = useRef("");
   const correctRef = useRef(0);
   const totalKeysRef = useRef(0);
@@ -102,12 +89,24 @@ export function useRace() {
     setPlayer(playerData);
     setAuthHeaders(headers);
     setScreen(SCREEN.LOBBY);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        mode: "player", screen: SCREEN.LOBBY,
+        adminToken: "", player: playerData, authHeaders: headers, roomId: null,
+      }));
+    } catch {}
   }, []);
 
   const loginAdmin = useCallback((token) => {
     setMode("admin");
     setAdminToken(token);
     setScreen(SCREEN.ADMIN_PANEL);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        mode: "admin", screen: SCREEN.ADMIN_PANEL,
+        adminToken: token, player: null, authHeaders: null, roomId: null,
+      }));
+    } catch {}
   }, []);
 
   const joinLobby = useCallback(
@@ -130,6 +129,10 @@ export function useRace() {
             setRoomId(ack.roomId);
             setRoomPlayers(ack.players || []);
             setRoomStatus(ack.status || "waiting");
+            try {
+              const s = loadSession();
+              if (s) localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...s, roomId: ack.roomId }));
+            } catch {}
           }
         );
       };
