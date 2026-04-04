@@ -106,6 +106,17 @@
       RESULTS: "results"
     };
 
+    const SESSION_KEY = "trs_session";
+    function saveSession(data) {
+      try { const s = JSON.stringify(data); sessionStorage.setItem(SESSION_KEY, s); localStorage.setItem(SESSION_KEY, s); } catch(e) {}
+    }
+    function loadSession() {
+      try { const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
+    }
+    function clearSession() {
+      try { sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY); } catch(e) {}
+    }
+
     // ═══════════════════════════════════════════════════════
     //  API CLIENT
     // ═══════════════════════════════════════════════════════
@@ -356,7 +367,7 @@
       );
     }
 
-    function AdminPanelScreen({ adminToken, players, onSavePlayers, onStartRace, onBack }) {
+    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, onSavePlayers, onStartRace, onBack }) {
       const [playerCount, setPlayerCount] = useState(2);
       const [rows, setRows] = useState([
         { id: "P001", name: "", pin: "", school: "شمس المعارف", avatar: "🧑‍🎓" },
@@ -458,6 +469,35 @@
                     ))}
                   </div>
                 </section>
+                {(raceActive || Object.keys(liveProgress || {}).length > 0) && (
+                  <section className="glass-strong rounded-3xl p-6" dir="rtl">
+                    <h2 className="text-xl font-bold text-white">تقدم السباق المباشر</h2>
+                    <p className="text-sm text-white/45 mt-1">متابعة حيّة لتقدم اللاعبين أثناء السباق.</p>
+                    <div className="mt-5 space-y-3">
+                      {players.map(p => {
+                        const stats = (liveProgress || {})[p.playerId] || {};
+                        const pct = Math.max(0, Math.min(100, stats.progress || 0));
+                        return (
+                          <div key={p.playerId} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl">{p.avatar || "🧑‍🎓"}</span>
+                              <div className="flex-1"><div className="font-semibold text-white">{p.name}</div></div>
+                              {stats.finished && <span className="rounded-xl border border-amber-400/30 bg-amber-400/15 px-3 py-1 text-xs font-bold text-amber-200">أنهى</span>}
+                            </div>
+                            <div className="mt-3">
+                              <div className="flex justify-between text-xs text-white/55 mb-1"><span>التقدم</span><span>{pct}%</span></div>
+                              <div className="h-3 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-l from-brand-500 to-emerald-400 transition-all duration-300" style={{width:`${pct}%`}}></div></div>
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                              <span className="rounded-xl border border-brand-500/20 bg-brand-500/10 px-3 py-1 text-xs font-bold text-brand-100">{stats.wpm || 0} WPM</span>
+                              <span className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-100">{stats.accuracy || 0}% دقة</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
                 <section className="glass-strong rounded-3xl p-6">
                   <h2 className="text-xl font-bold text-white">بدء السباق</h2>
                   <p className="text-sm text-white/45 mt-1">يبدأ العد التنازلي من 10 إلى 0 عند ضغط زر البدء.</p>
@@ -702,11 +742,17 @@
     // ═══════════════════════════════════════════════════════
 
     function App() {
-      const [screen, setScreen] = useState(SCREEN.LANDING);
-      const [mode, setMode] = useState(null);
-      const modeRef = useRef(null);
-      const [player, setPlayer] = useState(null);
-      const [adminToken, setAdminToken] = useState("");
+      const _s = loadSession();
+      const [screen, setScreen] = useState(() => {
+        if (!_s?.mode) return SCREEN.LANDING;
+        if (_s.mode === "player" && [SCREEN.COUNTDOWN, SCREEN.RACE, SCREEN.RESULTS].includes(_s.screen)) return SCREEN.LOBBY;
+        return _s.screen || SCREEN.LANDING;
+      });
+      const [mode, setMode] = useState(_s?.mode || null);
+      const modeRef = useRef(_s?.mode || null);
+      const [player, setPlayer] = useState(_s?.player || null);
+      const [adminToken, setAdminToken] = useState(_s?.adminToken || "");
+      const [raceActive, setRaceActive] = useState(false);
       const [socket, setSocket] = useState(null);
       const [connected, setConnected] = useState(false);
       const [roomId, setRoomId] = useState(null);
@@ -741,9 +787,6 @@
           setRoomId(data.roomId);
           setPlayers(data.players || []);
         });
-        s.on("room_update", data => {
-          setPlayers(data.players || []);
-        });
         s.on("player_ready", data => {
           setPlayers(data.players || []);
         });
@@ -757,6 +800,11 @@
           setCountVal(data.value);
           if (modeRef.current === "player") setScreen(SCREEN.COUNTDOWN);
         });
+        s.on("room_update", data => {
+          setPlayers(data.players || []);
+          if (data.status === "racing") setRaceActive(true);
+          if (data.status === "finished" || data.status === "waiting") setRaceActive(false);
+        });
         s.on("race_start", data => {
           setRaceText(data.text);
           setMaxDur(data.maxDuration);
@@ -768,6 +816,7 @@
           startTimeRef.current = null;
           setTyped("");
           setLive({});
+          setRaceActive(true);
           if (modeRef.current === "player") setScreen(SCREEN.RACE);
         });
         s.on("player_progress", data => {
@@ -778,6 +827,7 @@
         });
         s.on("race_end", data => {
           setStandings(data.standings || []);
+          setRaceActive(false);
           if (modeRef.current === "player") setScreen(SCREEN.RESULTS);
         });
         s.on("player_left", data => setPlayers(data.players || []));
@@ -787,12 +837,14 @@
       }, [socket]);
 
       const resetApp = useCallback(() => {
+        clearSession();
         socket?.disconnect();
         setSocket(null);
         setConnected(false);
         setScreen(SCREEN.LANDING);
         setMode(null);
         modeRef.current = null;
+        setRaceActive(false);
         setPlayer(null);
         setAdminToken("");
         setRoomId(null);
@@ -817,6 +869,7 @@
         modeRef.current = "player";
         setPlayer(p);
         setScreen(SCREEN.LOBBY);
+        saveSession({ mode: "player", screen: SCREEN.LOBBY, player: p, adminToken: "" });
 
         const joinRoom = () => {
           s.emit("join_room", {
@@ -842,6 +895,7 @@
         modeRef.current = "admin";
         setAdminToken(token);
         setScreen(SCREEN.ADMIN_PANEL);
+        saveSession({ mode: "admin", screen: SCREEN.ADMIN_PANEL, adminToken: token, player: null });
 
         const joinAdmin = () => {
           s.emit("admin_connect", { token }, (ack) => {
@@ -855,6 +909,25 @@
         if (s.connected) joinAdmin();
         else s.once("connect", joinAdmin);
       }, [connectSocket]);
+
+      // Auto-reconnect socket on page refresh
+      useEffect(() => {
+        const saved = loadSession();
+        if (!saved?.mode) return;
+        const s = connectSocket();
+        if (saved.mode === "admin" && saved.adminToken) {
+          const rejoin = () => s.emit("admin_connect", { token: saved.adminToken }, (ack) => {
+            if (!ack?.error) { setRoomId(ack.roomId); setPlayers(ack.players || []); }
+          });
+          if (s.connected) rejoin(); else s.once("connect", rejoin);
+        } else if (saved.mode === "player" && saved.player) {
+          const p = saved.player;
+          const rejoin = () => s.emit("join_room", { playerId: p.id || p.playerId, playerName: p.name, school: p.school, avatar: p.avatar }, (ack) => {
+            if (!ack?.error) { setRoomId(ack.roomId); setPlayers(ack.players || []); }
+          });
+          if (s.connected) rejoin(); else s.once("connect", rejoin);
+        }
+      }, []);
 
       const handleSavePlayers = useCallback(async (rows) => {
         const existing = await getPlayers();
@@ -902,7 +975,7 @@
         setTyped(newTyped);
 
         const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
-        socket?.emit("player_progress", { typed: newTyped, correctChars: correctRef.current, totalKeystrokes: totalKeysRef.current, elapsed });
+        socket?.emit("player_progress", { typed: newTyped.length, correctChars: correctRef.current, totalKeystrokes: totalKeysRef.current, elapsed });
 
         if (newTyped.length >= raceText.length) {
           const typedWpm = elapsed > 0 ? Math.round((correctRef.current / 5 / elapsed) * 60) : 0;
@@ -940,7 +1013,7 @@
             {screen === SCREEN.LANDING && <DashboardScreen onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
             {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen onSuccess={handleAdminLogin} onBack={resetApp} />}
             {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen onLogin={handlePlayerLogin} onBack={resetApp} />}
-            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onBack={resetApp} />}
+            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onBack={resetApp} />}
             {screen === SCREEN.LOBBY && <LobbyScreen player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
             {screen === SCREEN.COUNTDOWN && <CountdownScreen value={countVal} />}
             {screen === SCREEN.RACE && <RaceScreen player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
