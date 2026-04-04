@@ -2,14 +2,34 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useSocket } from "./useSocket.js";
 import { EMIT, ON, SCREEN } from "../services/contract.js";
 
-export function useRace() {
-  const [screen, setScreen] = useState(SCREEN.LANDING);
-  const [mode, setMode] = useState(null);
-  const [adminToken, setAdminToken] = useState("");
-  const [player, setPlayer] = useState(null);
-  const [authHeaders, setAuthHeaders] = useState(null);
+const STORAGE_KEY = "typing_race_session";
 
-  const [roomId, setRoomId] = useState(null);
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function useRace() {
+  const [screen, setScreen] = useState(() => {
+    const s = loadSession();
+    if (!s?.mode) return SCREEN.LANDING;
+    // Player mid-race screens → restore to lobby on refresh
+    if (s.mode === "player" && [SCREEN.COUNTDOWN, SCREEN.RACE, SCREEN.RESULTS].includes(s.screen)) {
+      return SCREEN.LOBBY;
+    }
+    return s.screen || SCREEN.LANDING;
+  });
+  const [mode, setMode] = useState(() => loadSession()?.mode || null);
+  const [adminToken, setAdminToken] = useState(() => loadSession()?.adminToken || "");
+  const [player, setPlayer] = useState(() => loadSession()?.player || null);
+  const [authHeaders, setAuthHeaders] = useState(() => loadSession()?.authHeaders || null);
+
+  const [roomId, setRoomId] = useState(() => loadSession()?.roomId || null);
   const [roomPlayers, setRoomPlayers] = useState([]);
   const [roomStatus, setRoomStatus] = useState("waiting");
 
@@ -23,8 +43,22 @@ export function useRace() {
   const [raceResults, setRaceResults] = useState(null);
   const [standings, setStandings] = useState([]);
   const [adminStandings, setAdminStandings] = useState([]);
+  const [raceActive, setRaceActive] = useState(false);
 
   const { connected, connect, disconnect, emit, on } = useSocket();
+
+  // Persist session to localStorage so refresh restores the correct page
+  useEffect(() => {
+    if (!mode) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, screen, adminToken, player, authHeaders, roomId }));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [mode, screen, adminToken, player, authHeaders, roomId]);
 
   const typedRef = useRef("");
   const correctRef = useRef(0);
@@ -37,8 +71,10 @@ export function useRace() {
   }, []);
 
   const goHome = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
     disconnect();
     setMode(null);
+    setRaceActive(false);
     setAdminToken("");
     setPlayer(null);
     setAuthHeaders(null);
@@ -137,6 +173,14 @@ export function useRace() {
     }
   }, [mode, player]);
 
+  // Restore admin socket connection on refresh
+  useEffect(() => {
+    if (mode === "admin" && adminToken) {
+      connectAdmin();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!connected) return;
 
@@ -200,6 +244,7 @@ export function useRace() {
         startTimeRef.current = null;
         setLiveProgress({});
         setAdminStandings([]);
+        setRaceActive(true);
 
         if (mode === "player") {
           setScreen(SCREEN.RACE);
@@ -243,6 +288,7 @@ export function useRace() {
         setStandings(data.standings || []);
         setAdminStandings(data.standings || []);
         setRaceResults(data);
+        setRaceActive(false);
         if (mode === "player") {
           setScreen(SCREEN.RESULTS);
         }
@@ -302,7 +348,7 @@ export function useRace() {
         : 0;
 
       emit(EMIT.PLAYER_PROGRESS, {
-        typed: typedRef.current,
+        typed: typedRef.current.length,
         correctChars: correctRef.current,
         totalKeystrokes: totalKeysRef.current,
         elapsed,
@@ -391,6 +437,7 @@ export function useRace() {
     raceResults,
     standings,
     adminStandings,
+    raceActive,
     newRace,
     restart,
     connected,

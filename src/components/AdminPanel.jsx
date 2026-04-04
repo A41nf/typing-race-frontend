@@ -21,6 +21,7 @@ export default function AdminPanel({
   connectedPlayers,
   liveProgress,
   adminStandings,
+  raceActive,
   onConnectAdmin,
   onStartRace,
   onNewRace,
@@ -64,7 +65,7 @@ export default function AdminPanel({
     () => connectedPlayers.filter((player) => player.ready).length,
     [connectedPlayers]
   );
-  const hasLiveProgress = Object.keys(liveProgress || {}).length > 0;
+  const hasLiveProgress = raceActive || Object.keys(liveProgress || {}).length > 0;
   const safeAdminStandings = adminStandings || [];
   const hasAdminStandings = safeAdminStandings.length > 0;
 

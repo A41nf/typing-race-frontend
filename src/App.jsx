@@ -58,6 +58,7 @@ export default function App() {
             connectedPlayers={race.roomPlayers}
             liveProgress={race.liveProgress}
             adminStandings={race.adminStandings}
+            raceActive={race.raceActive}
             onConnectAdmin={race.connectAdmin}
             onStartRace={race.startRace}
             onNewRace={race.newRace}
