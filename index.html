@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>سباق الكتابة — مدرسة شمس المعارف</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Socket.io Client -->
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { cairo: ['Cairo', 'Tajawal', 'sans-serif'] },
+          colors: {
+            brand:   { 400:'#59adff', 500:'#338bff', 600:'#1a6af5', 700:'#1454e1' },
+            gold:    { 400:'#facc15', 500:'#eab308' },
+            emerald: { 400:'#34d399', 500:'#10b981', 600:'#059669' },
+            rose:    { 400:'#fb7185', 500:'#f43f5e', 600:'#e11d48' },
+          },
+          animation: {
+            'bounce-in': 'bounceIn 0.6s cubic-bezier(0.34,1.56,0.64,1)',
+            'slide-up':  'slideUp 0.5s ease-out',
+            'fade-in':   'fadeIn 0.4s ease-out',
+            'count-pop': 'countPop 0.5s cubic-bezier(0.34,1.56,0.64,1)',
+            'glow':      'glow 2s ease-in-out infinite alternate',
+          },
+          keyframes: {
+            bounceIn:  { '0%':{transform:'scale(0.3)',opacity:'0'}, '60%':{transform:'scale(1.05)'}, '100%':{transform:'scale(1)',opacity:'1'} },
+            slideUp:   { '0%':{transform:'translateY(30px)',opacity:'0'}, '100%':{transform:'translateY(0)',opacity:'1'} },
+            fadeIn:    { '0%':{opacity:'0'}, '100%':{opacity:'1'} },
+            countPop:  { '0%':{transform:'scale(0.5)',opacity:'0'}, '60%':{transform:'scale(1.2)'}, '100%':{transform:'scale(1)',opacity:'1'} },
+            glow:      { '0%':{boxShadow:'0 0 20px rgba(51,139,255,0.3)'}, '100%':{boxShadow:'0 0 40px rgba(51,139,255,0.6)'} },
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    * { font-family: 'Cairo', 'Tajawal', sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+    .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.06); }
+    .glass-strong { background: rgba(255,255,255,0.06); backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.1); }
+
+    .char-correct { color: #34d399; }
+    .char-wrong   { color: #fb7185; background: rgba(251,113,133,0.15); border-radius: 2px; }
+    .char-current { color: #facc15; border-bottom: 3px solid #facc15; animation: pulse 1s ease-in-out infinite; }
+    .char-pending { color: rgba(255,255,255,0.35); }
+
+    .count-number { font-size: 8rem; font-weight: 900; background: linear-gradient(135deg, #338bff, #8ecaff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 30px rgba(51,139,255,0.4)); }
+    .race-input { caret-color: #facc15; }
+    .race-input:focus { outline: none; }
+    .progress-glow { box-shadow: 0 0 12px rgba(51,139,255,0.5), 0 0 4px rgba(51,139,255,0.3); }
+    .medal-gold { filter: drop-shadow(0 0 8px rgba(250,204,21,0.6)); }
+    .medal-silver { filter: drop-shadow(0 0 8px rgba(148,163,184,0.6)); }
+    .medal-bronze { filter: drop-shadow(0 0 8px rgba(217,119,6,0.6)); }
+    .screen-enter { animation: slideUp 0.5s ease-out, fadeIn 0.4s ease-out; }
+  </style>
+</head>
+<body class="bg-[#0a0e1a] text-white min-h-screen overflow-x-hidden">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ═══════════════════════════════════════════════════════
+    //  CONFIG
+    // ═══════════════════════════════════════════════════════
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const savedApiOrigin = localStorage.getItem("typingRaceApiOrigin");
+    const configuredApiOrigin = urlParams.get("api") || savedApiOrigin;
+    const DEFAULT_PRODUCTION_API_ORIGIN = "https://typing-race-backend-buvz.onrender.com";
+    const API_ORIGIN = configuredApiOrigin || (window.location.hostname === "localhost"
+      ? "http://localhost:3001"
+      : DEFAULT_PRODUCTION_API_ORIGIN);
+    if (urlParams.get("api")) localStorage.setItem("typingRaceApiOrigin", urlParams.get("api"));
+    const SOCKET_URL = `${API_ORIGIN}/race`;
+    const API        = `${API_ORIGIN}/api`;
+
+    const SCREEN = { DASHBOARD: "dashboard", LOBBY: "lobby", COUNTDOWN: "countdown", RACE: "race", RESULTS: "results" };
+
+    // ═══════════════════════════════════════════════════════
+    //  API CLIENT
+    // ═══════════════════════════════════════════════════════
+
+    async function apiLogin(id, pin) {
+      const res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, pin }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "خطأ في تسجيل الدخول");
+      return data;
+    }
+
+    async function submitResult(resultData, headers) {
+      const res = await fetch(`${API}/results`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Player-Id": headers.playerId, "X-Player-Pin": headers.playerPin },
+        body: JSON.stringify(resultData),
+      });
+      return res.json();
+    }
+
+    async function getPlayers() {
+      const res = await fetch(`${API}/players`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "تعذر تحميل اللاعبين");
+      return data.players || [];
+    }
+
+    async function updatePlayer(playerId, payload, adminToken) {
+      const res = await fetch(`${API}/players/${encodeURIComponent(playerId)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": adminToken,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "فشل حفظ بيانات اللاعب");
+      return data.player;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  UI COMPONENTS
+    // ═══════════════════════════════════════════════════════
+
+    function BGDecor() {
+      return (
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-brand-600/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-500/8 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-violet-500/5 rounded-full blur-3xl"></div>
+        </div>
+      );
+    }
+
+    function SchoolHeader({ subtitle }) {
+      return (
+        <div className="text-center mb-8 animate-fade-in">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500/20 to-brand-700/20 border border-brand-500/20 mb-4">
+            <span className="text-3xl">🏫</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-white via-white to-white/70 bg-clip-text text-transparent leading-relaxed">مدرسة شمس المعارف للتعليم الأساسي</h1>
+          <p className="text-white/40 text-sm mt-1 font-light">(1 - 4)</p>
+          {subtitle && <p className="text-brand-400 text-sm mt-2 font-medium">{subtitle}</p>}
+        </div>
+      );
+    }
+
+    const COLOR_MAP = {
+      brand: "from-brand-500/15 to-brand-600/5 border-brand-500/20 text-brand-400",
+      emerald: "from-emerald-500/15 to-emerald-600/5 border-emerald-500/20 text-emerald-400",
+      gold: "from-gold-500/15 to-gold-600/5 border-gold-500/20 text-gold-400",
+      rose: "from-rose-500/15 to-rose-600/5 border-rose-500/20 text-rose-400",
+    };
+
+    function StatCard({ icon, label, value, color = "brand" }) {
+      return (
+        <div className={`bg-gradient-to-br ${COLOR_MAP[color]} border rounded-2xl p-4`}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-4 h-4 opacity-70">{icon}</span>
+            <span className="text-xs text-white/50 font-medium">{label}</span>
+          </div>
+          <p className="text-2xl font-bold text-white">{value}</p>
+        </div>
+      );
+    }
+
+    function ProgressBar({ value, max, label }) {
+      const pct = Math.min((value / max) * 100, 100);
+      return (
+        <div className="glass rounded-xl p-3">
+          <div className="flex justify-between text-xs text-white/40 mb-2">
+            <span>{label || "التقدم"}</span>
+            <span>{Math.round(pct)}%</span>
+          </div>
+          <div className="h-3 bg-white/5 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-l from-brand-500 to-brand-400 rounded-full transition-all duration-300 progress-glow" style={{ width: `${pct}%` }}></div>
+          </div>
+        </div>
+      );
+    }
+
+    function formatTime(secs) { const m = Math.floor(secs / 60); const s = Math.floor(secs % 60); return `${m}:${String(s).padStart(2, "0")}`; }
+
+    // ═══════════════════════════════════════════════════════
+    //  SCREEN 1 — DASHBOARD (Login)
+    // ═══════════════════════════════════════════════════════
+
+    function AdminPlayersModal({ open, onClose, onPlayersUpdated }) {
+      const [players, setPlayers] = useState([]);
+      const [adminToken, setAdminToken] = useState(localStorage.getItem("typingRaceAdminToken") || "");
+      const [loading, setLoading] = useState(false);
+      const [savingId, setSavingId] = useState("");
+      const [message, setMessage] = useState("");
+      const [error, setError] = useState("");
+
+      const loadPlayers = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+          const list = await getPlayers();
+          setPlayers(list);
+          onPlayersUpdated?.(list);
+        } catch (err) {
+          setError(err.message || "تعذر تحميل بيانات اللاعبين");
+        } finally {
+          setLoading(false);
+        }
+      }, [onPlayersUpdated]);
+
+      useEffect(() => {
+        if (open) loadPlayers();
+      }, [open, loadPlayers]);
+
+      function handleFieldChange(index, field, value) {
+        setPlayers((prev) => prev.map((player, i) => i === index ? { ...player, [field]: value } : player));
+      }
+
+      async function handleSave(player, originalId) {
+        setSavingId(originalId);
+        setError("");
+        setMessage("");
+        try {
+          localStorage.setItem("typingRaceAdminToken", adminToken);
+          const updated = await updatePlayer(originalId, {
+            id: player.id,
+            pin: player.pin,
+            name: player.name,
+            school: player.school,
+            avatar: player.avatar,
+          }, adminToken);
+          const list = await getPlayers();
+          setPlayers(list);
+          onPlayersUpdated?.(list);
+          setMessage(`تم حفظ بيانات ${updated.name}`);
+        } catch (err) {
+          setError(err.message || "فشل حفظ البيانات");
+        } finally {
+          setSavingId("");
+        }
+      }
+
+      if (!open) return null;
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="max-w-6xl mx-auto glass-strong rounded-3xl p-6 md:p-8 border border-white/10">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white">إدارة اللاعبين</h2>
+                <p className="text-sm text-white/45 mt-1">يمكنك تعديل الاسم والمدرسة والرمز السري ورقم اللاعب قبل بدء السباق.</p>
+              </div>
+              <button onClick={onClose} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white/80">إغلاق</button>
+            </div>
+
+            <div className="grid md:grid-cols-[1fr_auto] gap-4 items-end mb-6">
+              <div>
+                <label className="block text-sm text-white/60 mb-2 font-medium">رمز المشرف</label>
+                <input
+                  type="password"
+                  value={adminToken}
+                  onChange={e => setAdminToken(e.target.value)}
+                  placeholder="أدخل رمز المشرف"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50"
+                />
+              </div>
+              <button onClick={loadPlayers} className="py-3 px-5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium">تحديث القائمة</button>
+            </div>
+
+            <div className="mb-4 text-xs text-white/35">خادم API الحالي: <span dir="ltr" className="text-brand-300">{API_ORIGIN}</span></div>
+
+            {message && <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm">{message}</div>}
+            {error && <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm">{error}</div>}
+
+            {loading ? (
+              <div className="py-12 text-center text-white/60">جاري تحميل اللاعبين...</div>
+            ) : (
+              <div className="space-y-4">
+                {players.map((player, index) => {
+                  const originalId = player.id;
+                  return (
+                    <div key={`${originalId}-${index}`} className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                      <div className="grid md:grid-cols-5 gap-3">
+                        <input value={player.id || ""} onChange={e => handleFieldChange(index, "id", e.target.value.toUpperCase())} className="rounded-xl px-3 py-3 bg-white/10 text-white" placeholder="رقم اللاعب" dir="ltr" />
+                        <input value={player.name || ""} onChange={e => handleFieldChange(index, "name", e.target.value)} className="rounded-xl px-3 py-3 bg-white/10 text-white" placeholder="الاسم" />
+                        <input value={player.school || ""} onChange={e => handleFieldChange(index, "school", e.target.value)} className="rounded-xl px-3 py-3 bg-white/10 text-white" placeholder="المدرسة" />
+                        <input value={player.avatar || ""} onChange={e => handleFieldChange(index, "avatar", e.target.value)} className="rounded-xl px-3 py-3 bg-white/10 text-white" placeholder="الرمز" />
+                        <input value={player.pin || ""} onChange={e => handleFieldChange(index, "pin", e.target.value)} className="rounded-xl px-3 py-3 bg-white/10 text-white tracking-widest" placeholder="PIN" dir="ltr" />
+                      </div>
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <div className="text-xs text-white/35">سيتم تطبيق التعديل مباشرة على السيرفر بعد الحفظ.</div>
+                        <button
+                          onClick={() => handleSave(player, originalId)}
+                          disabled={!adminToken || savingId === originalId}
+                          className="px-4 py-2 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {savingId === originalId ? "جاري الحفظ..." : "حفظ"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function DashboardScreen({ onLogin }) {
+      const [playerId, setPlayerId] = useState("");
+      const [pin, setPin] = useState("");
+      const [error, setError] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [presets, setPresets] = useState([]);
+      const [adminOpen, setAdminOpen] = useState(false);
+
+      const loadPlayers = useCallback(async () => {
+        try {
+          const players = await getPlayers();
+          setPresets(players.slice(0, 6));
+        } catch (err) {
+          console.warn("تعذر تحميل الدخول السريع", err.message);
+        }
+      }, []);
+
+      useEffect(() => {
+        loadPlayers();
+      }, [loadPlayers]);
+
+      const handleLogin = async () => {
+        setError(""); setLoading(true);
+        try {
+          const data = await apiLogin(playerId.trim(), pin);
+          onLogin(data.player, data.headers);
+        } catch (err) { setError(err.message); }
+        finally { setLoading(false); }
+      };
+
+      const quickLogin = async (id, pinVal) => {
+        setPlayerId(id); setPin(pinVal); setLoading(true);
+        try {
+          const data = await apiLogin(id, pinVal);
+          onLogin(data.player, data.headers);
+        } catch (err) { setError(err.message); setLoading(false); }
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+          <AdminPlayersModal open={adminOpen} onClose={() => setAdminOpen(false)} onPlayersUpdated={loadPlayers} />
+          <div className="w-full max-w-md">
+            <SchoolHeader subtitle="إعداد: أ. نصره الراشدية" />
+            <div className="glass-strong rounded-3xl p-8 animate-bounce-in">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-400">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10"/></svg>
+                </div>
+                <div><h2 className="text-xl font-bold text-white">سباق الكتابة</h2><p className="text-xs text-white/40">سجل دخولك للمشاركة</p></div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm text-white/60 mb-2 font-medium">رقم اللاعب</label>
+                <input type="text" value={playerId} onChange={e => { setPlayerId(e.target.value.toUpperCase()); setError(""); }} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="مثال: P001" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50 focus:bg-white/8 transition-all duration-200" dir="ltr" />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm text-white/60 mb-2 font-medium">الرمز السري</label>
+                <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="****" maxLength={4} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50 focus:bg-white/8 transition-all duration-200 text-lg tracking-widest" dir="ltr" />
+              </div>
+              {error && <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm text-center animate-fade-in">{error}</div>}
+              <button onClick={handleLogin} disabled={!playerId || !pin || loading}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 disabled:from-brand-500/30 disabled:to-brand-600/30 disabled:cursor-not-allowed text-white font-bold transition-all duration-200 shadow-lg shadow-brand-500/20 active:scale-[0.98] flex items-center justify-center gap-2">
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <>دخول</>}
+              </button>
+              <button onClick={() => setAdminOpen(true)} className="w-full mt-3 py-3 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 text-white/80 font-medium transition-all duration-200">إدارة اللاعبين</button>
+            </div>
+            <div className="mt-6 glass rounded-2xl p-4">
+              <p className="text-xs text-white/30 text-center mb-3">دخول سريع</p>
+              <div className="grid grid-cols-3 gap-2">
+                {presets.map(p => (
+                  <button key={p.id} onClick={() => quickLogin(p.id, p.pin)} disabled={loading}
+                    className="flex flex-col items-center gap-1 p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all duration-200 active:scale-95 disabled:opacity-50">
+                    <span className="text-xl">{p.avatar}</span>
+                    <span className="text-xs text-white/60 font-medium truncate w-full text-center">{(p.name || "").split(" ")[0]}</span>
+                    <span className="text-[10px] text-white/25" dir="ltr">{p.id}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SCREEN 2 — LOBBY (Real-time from server)
+    // ═══════════════════════════════════════════════════════
+
+    function LobbyScreen({ player, players, myReady, onReady }) {
+      const currentId = player.id || player.playerId;
+      const allReady = players.length >= 2 && players.every(p => p.ready);
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+          <div className="w-full max-w-lg">
+            <SchoolHeader subtitle="قاعة الانتظار" />
+            <div className="glass-strong rounded-3xl p-6 animate-bounce-in">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                  <div><h2 className="text-lg font-bold text-white">اللاعبون</h2><p className="text-xs text-white/40">{players.length} مشارك</p></div>
+                </div>
+                {allReady && <div className="text-3xl font-black text-brand-400 animate-count-pop">بدأ!</div>}
+              </div>
+              <div className="space-y-2 mb-6">
+                {players.map((p, i) => {
+                  const isMe = p.playerId === currentId;
+                  return (
+                    <div key={p.socketId || p.playerId} className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${isMe ? "bg-brand-500/10 border-brand-500/20" : "bg-white/[0.03] border-white/5"}`}>
+                      <span className="text-2xl">{p.avatar}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{p.name}{isMe && <span className="text-brand-400 text-xs mr-2">(أنت)</span>}</p>
+                        <p className="text-xs text-white/30">{p.playerId}</p>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all duration-300 ${p.ready ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-white/30 border border-white/5"}`}>
+                        {p.ready && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><polyline points="20 6 9 17 4 12"/></svg>}
+                        {p.ready ? "جاهز" : "ينتظر..."}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {!myReady && players.length >= 2 && (
+                <button onClick={onReady} className="w-full py-3.5 rounded-xl bg-gradient-to-l from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold transition-all duration-200 shadow-lg shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2 animate-slide-up">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5"><polyline points="20 6 9 17 4 12"/></svg> أنا جاهز!
+                </button>
+              )}
+              {myReady && !allReady && <div className="text-center text-emerald-400 text-sm font-medium animate-pulse">⏳ في انتظار باقي اللاعبين...</div>}
+              {players.length < 2 && <div className="text-center text-white/30 text-sm">⏳ في انتظار لاعبين آخرين...</div>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SCREEN 3 — COUNTDOWN (Server-driven)
+    // ═══════════════════════════════════════════════════════
+
+    function CountdownScreen({ value }) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a]">
+          <div className="text-center">
+            <div className="relative w-64 h-64 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-2 border-brand-500/10 animate-ping" style={{animationDuration:"2s"}}></div>
+              <div className="absolute inset-4 rounded-full border border-brand-500/5"></div>
+              <div className="absolute inset-8 rounded-full border border-brand-500/5"></div>
+              {value && (value === "3" || value === "2" || value === "1") && (
+                <div key={value} className="count-number animate-count-pop">{value}</div>
+              )}
+              {value && value !== "3" && value !== "2" && value !== "1" && (
+                <div key="go" className="animate-count-pop">
+                  <div className="text-5xl md:text-6xl font-black bg-gradient-to-r from-emerald-400 to-brand-400 bg-clip-text text-transparent animate-bounce-in">{value}</div>
+                </div>
+              )}
+              {!value && <p className="text-white/20 animate-pulse">جاري التحضير...</p>}
+            </div>
+            <p className="text-white/20 text-sm mt-4 animate-pulse">استعد...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SCREEN 4 — RACE (Real-time typing + leaderboard)
+    // ═══════════════════════════════════════════════════════
+
+    function RaceScreen({ player, text, typed, onChange, wpm, accuracy, progress, score, elapsed, maxDuration, liveProgress, roomPlayers }) {
+      const inputRef = useRef(null);
+      const currentId = player.id || player.playerId;
+      useEffect(() => { inputRef.current?.focus(); }, []);
+
+      const remaining = Math.max(0, maxDuration - elapsed);
+      const isFinished = typed.length >= text.length;
+
+      const charMap = useMemo(() => {
+        const chars = [];
+        for (let i = 0; i < text.length; i++) {
+          if (i < typed.length) chars.push({ char: text[i], status: typed[i] === text[i] ? "correct" : "wrong" });
+          else if (i === typed.length) chars.push({ char: text[i], status: "current" });
+          else chars.push({ char: text[i], status: "pending" });
+        }
+        return chars;
+      }, [text, typed]);
+
+      const leaderboard = useMemo(() => {
+        const entries = roomPlayers.map(p => {
+          if (p.playerId === currentId) return { ...p, progress, wpm, isMe: true };
+          const lp = liveProgress[p.playerId] || {};
+          return { ...p, progress: lp.progress || 0, wpm: lp.wpm || 0, isMe: false };
+        });
+        return entries.sort((a, b) => b.progress - a.progress);
+      }, [roomPlayers, liveProgress, currentId, progress, wpm]);
+
+      return (
+        <div className="min-h-screen flex flex-col p-3 md:p-6 screen-enter">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 glass rounded-xl px-4 py-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span className={`text-lg font-bold font-mono tabular-nums ${remaining < 15 ? "text-rose-400 animate-pulse" : "text-white"}`}>{formatTime(remaining)}</span>
+            </div>
+            <div className="flex items-center gap-2"><span className="text-lg">{player.avatar}</span><span className="text-sm font-semibold text-white/80">{player.name}</span></div>
+          </div>
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            <StatCard icon={<svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>} label="كلمة/دقيقة" value={wpm} color="brand" />
+            <StatCard icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>} label="الدقة" value={`${accuracy}%`} color="emerald" />
+            <StatCard icon={<svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>} label="النتيجة" value={score} color="gold" />
+            <StatCard icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M7 16h10"/></svg>} label="التقدم" value={`${progress}%`} color="rose" />
+          </div>
+          <div className="flex-1 flex gap-4">
+            <div className="flex-1 flex flex-col">
+              <div className="glass-strong rounded-2xl p-5 md:p-6 mb-3 flex-1 min-h-[180px] max-h-[280px] overflow-y-auto">
+                <div className="text-xl md:text-2xl leading-[2.2] font-medium tracking-wide text-right selection:bg-brand-500/30">
+                  {charMap.map((c, i) => <span key={i} className={`transition-colors duration-100 ${c.status === "correct" ? "char-correct" : ""} ${c.status === "wrong" ? "char-wrong" : ""} ${c.status === "current" ? "char-current" : ""} ${c.status === "pending" ? "char-pending" : ""}`}>{c.char}</span>)}
+                </div>
+              </div>
+              <div className="glass-strong rounded-2xl p-1 mb-3 animate-glow" style={{ animationPlayState: isFinished ? "paused" : "running" }}>
+                <input ref={inputRef} type="text" value={typed} onChange={e => onChange(e.target.value)} disabled={isFinished} placeholder="ابدأ الكتابة هنا..." className="race-input w-full bg-transparent rounded-xl py-4 px-5 text-lg text-white placeholder:text-white/20 disabled:opacity-50" dir="rtl" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" />
+              </div>
+              <ProgressBar value={typed.length} max={text.length} label={`${typed.length} / ${text.length} حرف`} />
+            </div>
+            <div className="hidden md:block w-56 glass-strong rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gold-400"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                <span className="text-sm font-bold text-white/70">الترتيب المباشر</span>
+              </div>
+              <div className="space-y-2">
+                {leaderboard.map((p, i) => (
+                  <div key={p.playerId} className={`flex items-center gap-2 p-2 rounded-lg transition-all duration-300 ${p.isMe ? "bg-brand-500/15" : "bg-white/[0.03]"}`}>
+                    <span className={`text-xs font-bold w-5 text-center ${i === 0 ? "text-gold-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-white/30"}`}>{i + 1}</span>
+                    <span className="text-base">{p.avatar}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-white/80 truncate">{p.name?.split(" ")[0]}</p>
+                      <div className="h-1.5 bg-white/5 rounded-full mt-1 overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${p.isMe ? "bg-brand-400" : "bg-white/20"}`} style={{ width: `${p.progress}%` }}></div></div>
+                    </div>
+                    <span className="text-[10px] text-white/30 font-mono">{Math.round(p.progress)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {isFinished && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+              <div className="text-center animate-bounce-in"><div className="text-6xl mb-4">🏁</div><h2 className="text-3xl font-bold text-white mb-2">أحسنت!</h2><p className="text-white/50">في انتظار باقي اللاعبين...</p></div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SCREEN 5 — RESULTS (Server standings)
+    // ═══════════════════════════════════════════════════════
+
+    function ResultsScreen({ player, results, standings, onRestart }) {
+      const currentId = player.id || player.playerId;
+      const myRank = standings.findIndex(s => s.playerId === currentId) + 1;
+      const MEDALS = ["🥇", "🥈", "🥉"];
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+          <div className="w-full max-w-lg">
+            <SchoolHeader subtitle="النتائج النهائية" />
+            <div className="glass-strong rounded-3xl p-6 mb-4 animate-bounce-in">
+              <div className="text-center mb-6">
+                <div className="text-5xl mb-2">{myRank > 0 && myRank <= 3 ? MEDALS[myRank - 1] : "🎯"}</div>
+                <h2 className="text-2xl font-bold text-white">{player.name}</h2>
+                <p className="text-sm text-white/40 mt-1">{myRank === 1 ? "🎉 مبروك! المركز الأول" : myRank > 0 ? `المركز ${myRank} من ${standings.length}` : "أحسنت!"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <StatCard icon={<svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>} label="كلمة في الدقيقة" value={results.wpm} color="brand" />
+                <StatCard icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>} label="الدقة" value={`${results.accuracy}%`} color="emerald" />
+                <StatCard icon={<svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>} label="النتيجة" value={results.score} color="gold" />
+                <StatCard icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} label="الوقت" value={`${Math.round(results.time)}ث`} color="rose" />
+              </div>
+              <div className="bg-white/5 rounded-xl p-4">
+                <div className="flex justify-between text-xs text-white/40 mb-2"><span>الأداء</span><span>{results.wpm} كلمة/دقيقة</span></div>
+                <div className="h-4 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-l from-emerald-400 to-brand-400 rounded-full transition-all duration-1000 progress-glow" style={{ width: `${Math.min((results.wpm / 60) * 100, 100)}%` }}></div></div>
+                <div className="flex justify-between text-[10px] text-white/20 mt-1"><span>0</span><span>30</span><span>60+</span></div>
+              </div>
+            </div>
+            <div className="glass-strong rounded-2xl p-4 mb-4 animate-slide-up" style={{animationDelay:"200ms"}}>
+              <div className="flex items-center gap-2 mb-4">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 text-gold-400"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                <span className="text-sm font-bold text-white/70">الترتيب النهائي</span>
+              </div>
+              <div className="space-y-2">
+                {standings.map((s, i) => {
+                  const isMe = s.playerId === currentId;
+                  return (
+                    <div key={s.playerId} className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 ${isMe ? "bg-brand-500/15 border border-brand-500/20" : "bg-white/[0.03]"} ${i < 3 ? "animate-slide-up" : ""}`} style={{ animationDelay: `${300 + i * 100}ms` }}>
+                      <span className={`text-xl font-black w-8 text-center ${i === 0 ? "text-gold-400 medal-gold" : i === 1 ? "text-slate-300 medal-silver" : i === 2 ? "text-amber-600 medal-bronze" : "text-white/30"}`}>{i < 3 ? MEDALS[i] : i + 1}</span>
+                      <span className="text-xl">{s.avatar}</span>
+                      <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-white truncate">{s.name}{isMe && <span className="text-brand-400 text-xs mr-1">(أنت)</span>}</p><p className="text-xs text-white/30">{s.school}</p></div>
+                      <div className="text-left"><p className="text-sm font-bold text-white">{s.stats?.score || s.score || 0}</p><p className="text-[10px] text-white/30" dir="ltr">{s.stats?.wpm || s.wpm || 0} WPM · {s.stats?.accuracy || s.accuracy || 0}%</p></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="animate-slide-up" style={{animationDelay:"800ms"}}>
+              <button onClick={onRestart} className="w-full py-3.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white font-bold transition-all duration-200 shadow-lg shadow-brand-500/20 active:scale-[0.98]">سباق جديد</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  APP — Full-stack orchestrator with Socket.io
+    // ═══════════════════════════════════════════════════════
+
+    function App() {
+      const [screen, setScreen]         = useState(SCREEN.DASHBOARD);
+      const [player, setPlayer]         = useState(null);
+      const [authHeaders, setAuth]      = useState(null);
+      const [socket, setSocket]         = useState(null);
+      const [connected, setConnected]   = useState(false);
+
+      // Room state
+      const [roomId, setRoomId]         = useState(null);
+      const [roomPlayers, setPlayers]   = useState([]);
+      const [myReady, setMyReady]       = useState(false);
+
+      // Race state
+      const [raceText, setRaceText]     = useState("");
+      const [maxDuration, setMaxDur]    = useState(120);
+      const [countVal, setCountVal]     = useState(null);
+      const [startedAt, setStartedAt]   = useState(null);
+      const [liveProgress, setLive]     = useState({});
+
+      // Typing state (refs)
+      const typedRef = useRef("");
+      const correctRef = useRef(0);
+      const totalKeysRef = useRef(0);
+      const startTimeRef = useRef(null);
+      const [typed, setTyped] = useState("");
+
+      // Results
+      const [standings, setStandings]   = useState([]);
+
+      // Derived metrics
+      const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
+      const wpm = elapsed > 0 ? Math.round((correctRef.current / 5 / elapsed) * 60) : 0;
+      const accuracy = totalKeysRef.current > 0 ? Math.round((correctRef.current / totalKeysRef.current) * 100) : 100;
+      const progress = raceText ? Math.min(Math.round((typed.length / raceText.length) * 100), 100) : 0;
+      const score = Math.round(wpm * (accuracy / 100) * 10);
+
+      // ── Login ──
+      const handleLogin = useCallback((p, headers) => {
+        setPlayer(p);
+        setAuth(headers);
+
+        // Connect socket
+        const s = io(SOCKET_URL, { transports: ["websocket"], reconnection: true });
+        s.on("connect", () => { setConnected(true); console.log("🔌 Connected"); });
+        s.on("disconnect", () => setConnected(false));
+
+        // Room events
+        s.on("room_joined", (data) => {
+          setRoomId(data.roomId);
+          setPlayers(data.players || []);
+        });
+        s.on("room_update", (data) => setPlayers(data.players || []));
+        s.on("player_ready", (data) => setPlayers(data.players || []));
+        s.on("all_ready", () => setScreen(SCREEN.COUNTDOWN));
+        s.on("countdown_tick", (data) => setCountVal(data.value));
+        s.on("race_start", (data) => {
+          setRaceText(data.text);
+          setMaxDur(data.maxDuration);
+          setStartedAt(data.startedAt);
+          setPlayers(data.players || []);
+          setScreen(SCREEN.RACE);
+          typedRef.current = ""; correctRef.current = 0; totalKeysRef.current = 0; startTimeRef.current = null;
+          setTyped(""); setLive({});
+        });
+        s.on("player_progress", (data) => {
+          setLive(prev => ({ ...prev, [data.playerId]: { progress: data.progress, wpm: data.wpm, accuracy: data.accuracy, score: data.score, finished: data.finished } }));
+        });
+        s.on("player_finish", (data) => {
+          setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), finished: true, ...(data.stats || {}) } }));
+        });
+        s.on("race_end", (data) => {
+          setStandings(data.standings || []);
+          setScreen(SCREEN.RESULTS);
+        });
+        s.on("player_left", (data) => setPlayers(data.players || []));
+        s.on("error", (data) => console.error("Socket error:", data.message));
+
+        setSocket(s);
+        setScreen(SCREEN.LOBBY);
+
+        // Join room after connect
+        const doJoin = () => {
+          s.emit("join_room", {
+            playerId: p.id || p.playerId,
+            playerName: p.name,
+            school: p.school,
+            avatar: p.avatar,
+          }, (ack) => {
+            if (ack?.error) console.error("Join error:", ack.message);
+            else { setRoomId(ack.roomId); setPlayers(ack.players || []); }
+          });
+        };
+        if (s.connected) doJoin(); else s.once("connect", doJoin);
+      }, []);
+
+      // ── Ready ──
+      const handleReady = useCallback(() => {
+        if (!socket) return;
+        setMyReady(true);
+        socket.emit("player_ready", {}, (ack) => {
+          if (ack?.error) console.error("Ready error:", ack.message);
+        });
+      }, [socket]);
+
+      // ── Typing handler ──
+      const handleTyping = useCallback((newTyped) => {
+        if (!raceText) return;
+        const prevLen = typedRef.current.length;
+        if (!startTimeRef.current && newTyped.length > 0) startTimeRef.current = Date.now();
+        if (newTyped.length > prevLen) {
+          totalKeysRef.current++;
+          if (newTyped[newTyped.length - 1] === raceText[newTyped.length - 1]) correctRef.current++;
+        }
+        typedRef.current = newTyped;
+        setTyped(newTyped);
+
+        const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
+        socket?.emit("player_progress", { typed: newTyped, correctChars: correctRef.current, totalKeystrokes: totalKeysRef.current, elapsed });
+
+        if (newTyped.length >= raceText.length) {
+          const wpm = elapsed > 0 ? Math.round((correctRef.current / 5 / elapsed) * 60) : 0;
+          const acc = totalKeysRef.current > 0 ? Math.round((correctRef.current / totalKeysRef.current) * 100) : 100;
+          const sc = Math.round(wpm * (acc / 100) * 10);
+          socket?.emit("player_finish", { wpm, accuracy: acc, score: sc, time: elapsed, correctChars: correctRef.current, totalKeystrokes: totalKeysRef.current });
+        }
+      }, [raceText, socket]);
+
+      // ── Restart ──
+      const handleRestart = useCallback(() => {
+        setRaceText(""); setStandings([]); setLive({}); setCountVal(null); setMyReady(false);
+        typedRef.current = ""; correctRef.current = 0; totalKeysRef.current = 0; startTimeRef.current = null;
+        setTyped("");
+        // Re-join room
+        if (socket && player) {
+          socket.emit("join_room", { playerId: player.id || player.playerId, playerName: player.name, school: player.school, avatar: player.avatar, roomId }, (ack) => {
+            if (!ack?.error) { setPlayers(ack.players || []); setScreen(SCREEN.LOBBY); }
+          });
+        }
+      }, [socket, player, roomId]);
+
+      // ── Render ──
+      return (
+        <div className="font-cairo relative min-h-screen">
+          <BGDecor />
+          <div className="relative z-10">
+            {screen === SCREEN.DASHBOARD && <DashboardScreen onLogin={handleLogin} />}
+            {screen === SCREEN.LOBBY && <LobbyScreen player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
+            {screen === SCREEN.COUNTDOWN && <CountdownScreen value={countVal} />}
+            {screen === SCREEN.RACE && <RaceScreen player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
+            {screen === SCREEN.RESULTS && <ResultsScreen player={player} results={{ wpm, accuracy, score, time: elapsed, correctChars: correctRef.current, totalKeys: totalKeysRef.current }} standings={standings} onRestart={handleRestart} />}
+            {!connected && screen !== SCREEN.DASHBOARD && (
+              <div className="fixed top-4 left-4 z-50 bg-rose-500/20 border border-rose-500/30 rounded-xl px-4 py-2 text-sm text-rose-400 animate-pulse">⚠️ جاري إعادة الاتصال...</div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
