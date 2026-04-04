@@ -367,7 +367,7 @@
       );
     }
 
-    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, onSavePlayers, onStartRace, onBack }) {
+    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, onSavePlayers, onStartRace, onNewRace, onBack }) {
       const [playerCount, setPlayerCount] = useState(2);
       const [rows, setRows] = useState([
         { id: "P001", name: "", pin: "", school: "شمس المعارف", avatar: "🧑‍🎓" },
@@ -495,6 +495,33 @@
                           </div>
                         );
                       })}
+                    </div>
+                  </section>
+                )}
+                {standings.length > 0 && (
+                  <section className="glass-strong rounded-3xl p-6">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div>
+                        <h2 className="text-xl font-bold text-white">النتائج النهائية</h2>
+                        <p className="text-sm text-white/45 mt-1">يمكن بدء سباق جديد دون تسجيل خروج المشرف.</p>
+                      </div>
+                      <button onClick={onNewRace} className="px-4 py-2 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 text-white font-bold">سباق جديد</button>
+                    </div>
+                    <div className="space-y-2">
+                      {standings.map((entry, index) => (
+                        <div key={entry.playerId} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <span className={`w-8 text-center text-lg font-black ${index === 0 ? "text-gold-400" : index === 1 ? "text-slate-300" : index === 2 ? "text-amber-600" : "text-white/30"}`}>{index + 1}</span>
+                          <span className="text-2xl">{entry.avatar || "🧑‍🎓"}</span>
+                          <div className="flex-1">
+                            <div className="font-semibold text-white">{entry.name}</div>
+                            <div className="text-xs text-white/35">{entry.school}</div>
+                          </div>
+                          <div className="text-left">
+                            <div className="font-bold text-white">{entry.stats?.score || entry.score || 0}</div>
+                            <div className="text-xs text-white/40" dir="ltr">{entry.stats?.wpm || entry.wpm || 0} WPM</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </section>
                 )}
@@ -986,6 +1013,7 @@
       }, [raceText, socket]);
 
       const handleRestart = useCallback(() => {
+        clearSession();
         setRaceText("");
         setStandings([]);
         setLive({});
@@ -1006,6 +1034,100 @@
         }
       }, [socket, player, roomId]);
 
+      const handleAdminNewRace = useCallback(() => {
+        const token = adminToken;
+        clearSession();
+        socket?.disconnect();
+        setSocket(null);
+        setConnected(false);
+        setRaceActive(false);
+        setRoomId(null);
+        setPlayers([]);
+        setMyReady(false);
+        setRaceText("");
+        setMaxDur(120);
+        setCountVal(null);
+        setStartedAt(null);
+        setLive({});
+        setStandings([]);
+        typedRef.current = "";
+        correctRef.current = 0;
+        totalKeysRef.current = 0;
+        startTimeRef.current = null;
+        setTyped("");
+        setScreen(SCREEN.ADMIN_PANEL);
+        setMode("admin");
+        modeRef.current = "admin";
+        setAdminToken(token);
+
+        const nextSocket = io(SOCKET_URL, { transports: ["websocket"], reconnection: true });
+        nextSocket.on("connect", () => setConnected(true));
+        nextSocket.on("disconnect", () => setConnected(false));
+        nextSocket.on("room_joined", data => {
+          setRoomId(data.roomId);
+          setPlayers(data.players || []);
+        });
+        nextSocket.on("player_ready", data => {
+          setPlayers(data.players || []);
+        });
+        nextSocket.on("admin_player_joined", data => {
+          setPlayers(data.players || []);
+        });
+        nextSocket.on("admin_player_ready", data => {
+          setPlayers(data.players || []);
+        });
+        nextSocket.on("countdown_tick", data => {
+          setCountVal(data.value);
+          if (modeRef.current === "player") setScreen(SCREEN.COUNTDOWN);
+        });
+        nextSocket.on("room_update", data => {
+          setPlayers(data.players || []);
+          if (data.status === "racing") setRaceActive(true);
+          if (data.status === "finished" || data.status === "waiting") setRaceActive(false);
+        });
+        nextSocket.on("race_start", data => {
+          setRaceText(data.text);
+          setMaxDur(data.maxDuration);
+          setStartedAt(data.startedAt);
+          setPlayers(data.players || []);
+          typedRef.current = "";
+          correctRef.current = 0;
+          totalKeysRef.current = 0;
+          startTimeRef.current = null;
+          setTyped("");
+          setLive({});
+          setRaceActive(true);
+          if (modeRef.current === "player") setScreen(SCREEN.RACE);
+        });
+        nextSocket.on("player_progress", data => {
+          setLive(prev => ({ ...prev, [data.playerId]: { progress: data.progress, wpm: data.wpm, accuracy: data.accuracy, score: data.score, finished: data.finished } }));
+        });
+        nextSocket.on("player_finish", data => {
+          setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), finished: true, ...(data.stats || {}) } }));
+        });
+        nextSocket.on("race_end", data => {
+          setStandings(data.standings || []);
+          setRaceActive(false);
+          if (modeRef.current === "player") setScreen(SCREEN.RESULTS);
+        });
+        nextSocket.on("player_left", data => setPlayers(data.players || []));
+        nextSocket.on("error", data => console.error("Socket error:", data.message));
+        setSocket(nextSocket);
+        saveSession({ mode: "admin", screen: SCREEN.ADMIN_PANEL, adminToken: token, player: null });
+
+        const joinAdmin = () => {
+          nextSocket.emit("admin_connect", { token }, (ack) => {
+            if (!ack?.error) {
+              setRoomId(ack.roomId);
+              setPlayers(ack.players || []);
+            }
+          });
+        };
+
+        if (nextSocket.connected) joinAdmin();
+        else nextSocket.once("connect", joinAdmin);
+      }, [adminToken, socket]);
+
       return (
         <div className="font-cairo relative min-h-screen">
           <BGDecor />
@@ -1013,7 +1135,7 @@
             {screen === SCREEN.LANDING && <DashboardScreen onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
             {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen onSuccess={handleAdminLogin} onBack={resetApp} />}
             {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen onLogin={handlePlayerLogin} onBack={resetApp} />}
-            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onBack={resetApp} />}
+            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onNewRace={handleAdminNewRace} onBack={resetApp} />}
             {screen === SCREEN.LOBBY && <LobbyScreen player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
             {screen === SCREEN.COUNTDOWN && <CountdownScreen value={countVal} />}
             {screen === SCREEN.RACE && <RaceScreen player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
