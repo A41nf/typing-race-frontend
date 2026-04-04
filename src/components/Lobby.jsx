@@ -60,8 +60,8 @@ export default function LobbyScreen({ player, players, onStart }) {
             </div>
 
             {allReady && (
-              <div className="text-3xl font-black text-brand-400 animate-count-pop">
-                بدأ!
+              <div className="text-sm font-bold text-brand-300 animate-fade-in">
+                بانتظار بدء المشرف
               </div>
             )}
           </div>
@@ -126,6 +126,12 @@ export default function LobbyScreen({ player, players, onStart }) {
             <div className="text-center text-emerald-400 text-sm
                             font-medium animate-pulse">
               ⏳ في انتظار باقي اللاعبين...
+            </div>
+          )}
+
+          {isReady && allReady && (
+            <div className="text-center text-brand-300 text-sm font-medium animate-pulse">
+              ⏳ الجميع جاهز، بانتظار المشرف لبدء العد التنازلي...
             </div>
           )}
 

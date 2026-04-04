@@ -1,73 +1,82 @@
-// ─────────────────────────────────────────────────────────
-// src/hooks/useRace.js — Race flow state machine (client)
-// ─────────────────────────────────────────────────────────
-//
-// Manages the full race lifecycle on the client:
-//   Dashboard → Lobby → Countdown → Race → Results
-//
-// Connects to Socket.io for real-time sync.
-// ─────────────────────────────────────────────────────────
-
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useSocket } from "./useSocket.js";
 import { EMIT, ON, SCREEN } from "../services/contract.js";
 
 export function useRace() {
-  // ── Screen state ──
-  const [screen, setScreen] = useState(SCREEN.DASHBOARD);
+  const [screen, setScreen] = useState(SCREEN.LANDING);
+  const [mode, setMode] = useState(null);
+  const [adminToken, setAdminToken] = useState("");
   const [player, setPlayer] = useState(null);
   const [authHeaders, setAuthHeaders] = useState(null);
 
-  // ── Room state ──
   const [roomId, setRoomId] = useState(null);
   const [roomPlayers, setRoomPlayers] = useState([]);
   const [roomStatus, setRoomStatus] = useState("waiting");
 
-  // ── Race state ──
   const [raceText, setRaceText] = useState("");
   const [raceTextId, setRaceTextId] = useState(null);
   const [maxDuration, setMaxDuration] = useState(120);
   const [startedAt, setStartedAt] = useState(null);
   const [countdownValue, setCountdownValue] = useState(null);
 
-  // ── Live progress from other players ──
   const [liveProgress, setLiveProgress] = useState({});
-
-  // ── Results ──
   const [raceResults, setRaceResults] = useState(null);
   const [standings, setStandings] = useState([]);
 
-  // ── Socket ──
   const { connected, connect, disconnect, emit, on } = useSocket();
 
-  // ── Typing state (refs to avoid stale closures in socket handlers) ──
   const typedRef = useRef("");
   const correctRef = useRef(0);
   const totalKeysRef = useRef(0);
   const startTimeRef = useRef(null);
 
-  // ══════════════════════════════════════════════════════════
-  //  1. LOGIN
-  // ══════════════════════════════════════════════════════════
+  const selectMode = useCallback((nextMode) => {
+    setMode(nextMode);
+    setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN);
+  }, []);
+
+  const goHome = useCallback(() => {
+    disconnect();
+    setMode(null);
+    setAdminToken("");
+    setPlayer(null);
+    setAuthHeaders(null);
+    setRoomId(null);
+    setRoomPlayers([]);
+    setRoomStatus("waiting");
+    setRaceText("");
+    setRaceTextId(null);
+    setMaxDuration(120);
+    setStartedAt(null);
+    setCountdownValue(null);
+    setLiveProgress({});
+    setRaceResults(null);
+    setStandings([]);
+    typedRef.current = "";
+    correctRef.current = 0;
+    totalKeysRef.current = 0;
+    startTimeRef.current = null;
+    setScreen(SCREEN.LANDING);
+  }, [disconnect]);
 
   const login = useCallback((playerData, headers) => {
+    setMode("player");
     setPlayer(playerData);
     setAuthHeaders(headers);
     setScreen(SCREEN.LOBBY);
   }, []);
 
-  // ══════════════════════════════════════════════════════════
-  //  2. JOIN LOBBY
-  // ══════════════════════════════════════════════════════════
+  const loginAdmin = useCallback((token) => {
+    setMode("admin");
+    setAdminToken(token);
+    setScreen(SCREEN.ADMIN_PANEL);
+  }, []);
 
   const joinLobby = useCallback(
     (targetRoomId = null) => {
       if (!player) return;
 
-      // Connect socket
       const socket = connect();
-
-      // Wait for connection then join
       const doJoin = () => {
         emit(
           EMIT.JOIN_ROOM,
@@ -79,11 +88,7 @@ export function useRace() {
             roomId: targetRoomId,
           },
           (ack) => {
-            if (ack?.error) {
-              console.error("Join error:", ack.message);
-              return;
-            }
-            console.log("✅ Joined room:", ack.roomId);
+            if (ack?.error) return;
             setRoomId(ack.roomId);
             setRoomPlayers(ack.players || []);
             setRoomStatus(ack.status || "waiting");
@@ -102,66 +107,101 @@ export function useRace() {
     [player, connect, emit]
   );
 
-  // ══════════════════════════════════════════════════════════
-  //  3. SOCKET EVENT SUBSCRIPTIONS
-  // ══════════════════════════════════════════════════════════
+  const connectAdmin = useCallback(() => {
+    if (!adminToken) return;
+
+    const socket = connect();
+    const doConnect = () => {
+      emit(EMIT.ADMIN_CONNECT, { token: adminToken }, (ack) => {
+        if (ack?.error) return;
+        setRoomId(ack.roomId || null);
+        setRoomPlayers(ack.players || []);
+        setRoomStatus(ack.status || "waiting");
+      });
+    };
+
+    if (socket.connected) {
+      doConnect();
+    } else {
+      socket.once("connect", doConnect);
+    }
+  }, [adminToken, connect, emit]);
+
+  useEffect(() => {
+    if (mode === "player" && player) {
+      joinLobby(roomId);
+    }
+  }, [mode, player]);
 
   useEffect(() => {
     if (!connected) return;
 
     const cleanups = [];
 
-    // Room update (players joined/left/ready)
     cleanups.push(
       on(ON.ROOM_UPDATE, (data) => {
         setRoomPlayers(data.players || []);
-        setRoomStatus(data.status);
+        setRoomStatus(data.status || "waiting");
       })
     );
 
-    // Player ready
     cleanups.push(
       on(ON.PLAYER_READY, (data) => {
         setRoomPlayers(data.players || []);
       })
     );
 
-    // All ready → transition to countdown screen
     cleanups.push(
-      on(ON.ALL_READY, (_data) => {
-        console.log("🏁 All ready!");
-        setScreen(SCREEN.COUNTDOWN);
+      on(ON.ADMIN_PLAYER_JOINED, (data) => {
+        setRoomPlayers(data.players || []);
+        setRoomStatus(data.status || "waiting");
       })
     );
 
-    // Countdown tick
+    cleanups.push(
+      on(ON.ADMIN_PLAYER_READY, (data) => {
+        setRoomPlayers(data.players || []);
+        setRoomStatus(data.status || "waiting");
+      })
+    );
+
+    cleanups.push(
+      on(ON.ALL_READY, () => {
+        if (mode === "player") {
+          setScreen(SCREEN.LOBBY);
+        }
+      })
+    );
+
     cleanups.push(
       on(ON.COUNTDOWN_TICK, (data) => {
         setCountdownValue(data.value);
+        if (mode === "player") {
+          setScreen(SCREEN.COUNTDOWN);
+        }
       })
     );
 
-    // Race start
     cleanups.push(
       on(ON.RACE_START, (data) => {
-        console.log("🚀 Race started!");
         setRaceText(data.text);
         setRaceTextId(data.textId);
         setMaxDuration(data.maxDuration);
         setStartedAt(data.startedAt);
         setRoomPlayers(data.players || []);
-        setScreen(SCREEN.RACE);
 
-        // Reset typing state
         typedRef.current = "";
         correctRef.current = 0;
         totalKeysRef.current = 0;
         startTimeRef.current = null;
         setLiveProgress({});
+
+        if (mode === "player") {
+          setScreen(SCREEN.RACE);
+        }
       })
     );
 
-    // Live progress from others
     cleanups.push(
       on(ON.PLAYER_PROGRESS, (data) => {
         setLiveProgress((prev) => ({
@@ -177,7 +217,6 @@ export function useRace() {
       })
     );
 
-    // Player finished
     cleanups.push(
       on(ON.PLAYER_FINISH, (data) => {
         setLiveProgress((prev) => ({
@@ -191,46 +230,34 @@ export function useRace() {
       })
     );
 
-    // Race end
     cleanups.push(
       on(ON.RACE_END, (data) => {
-        console.log("🏁 Race ended!");
         setStandings(data.standings || []);
         setRaceResults(data);
-        setScreen(SCREEN.RESULTS);
+        if (mode === "player") {
+          setScreen(SCREEN.RESULTS);
+        }
       })
     );
 
-    // Player left
     cleanups.push(
       on(ON.PLAYER_LEFT, (data) => {
         setRoomPlayers(data.players || []);
       })
     );
 
-    // Errors
-    cleanups.push(
-      on(ON.ERROR, (data) => {
-        console.error("Socket error:", data.message);
-      })
-    );
+    cleanups.push(on(ON.ERROR, () => {}));
 
     return () => cleanups.forEach((fn) => fn());
-  }, [connected, on]);
-
-  // ══════════════════════════════════════════════════════════
-  //  4. PLAYER ACTIONS
-  // ══════════════════════════════════════════════════════════
+  }, [connected, on, mode]);
 
   const setReady = useCallback(() => {
-    emit(EMIT.PLAYER_READY, {}, (ack) => {
-      if (ack?.error) console.error("Ready error:", ack.message);
-    });
+    emit(EMIT.PLAYER_READY, {}, () => {});
   }, [emit]);
 
-  // ══════════════════════════════════════════════════════════
-  //  5. TYPING ENGINE (server-synced)
-  // ══════════════════════════════════════════════════════════
+  const startRace = useCallback(() => {
+    emit(EMIT.ADMIN_START_RACE, { adminToken }, () => {});
+  }, [emit, adminToken]);
 
   const handleTyping = useCallback(
     (newTyped) => {
@@ -239,33 +266,25 @@ export function useRace() {
       const prevLen = typedRef.current.length;
       const newLen = newTyped.length;
 
-      // Start timer on first keypress
       if (!startTimeRef.current && newLen > 0) {
         startTimeRef.current = Date.now();
       }
 
-      // Determine what happened
       if (newLen > prevLen) {
-        // Forward: new character(s)
         const newChar = newTyped[newLen - 1];
-        totalKeysRef.current++;
-
+        totalKeysRef.current += 1;
         if (newChar === raceText[newLen - 1]) {
-          correctRef.current++;
+          correctRef.current += 1;
         }
-
         typedRef.current = newTyped;
       } else if (newLen < prevLen) {
-        // Backspace
         typedRef.current = newTyped;
       }
 
-      // Calculate elapsed
       const elapsed = startTimeRef.current
         ? (Date.now() - startTimeRef.current) / 1000
         : 0;
 
-      // Emit progress to server
       emit(EMIT.PLAYER_PROGRESS, {
         typed: typedRef.current,
         correctChars: correctRef.current,
@@ -273,12 +292,9 @@ export function useRace() {
         elapsed,
       });
 
-      // Check if finished
       if (typedRef.current.length >= raceText.length) {
         const wpm =
-          elapsed > 0
-            ? Math.round((correctRef.current / 5 / elapsed) * 60)
-            : 0;
+          elapsed > 0 ? Math.round((correctRef.current / 5 / elapsed) * 60) : 0;
         const accuracy =
           totalKeysRef.current > 0
             ? Math.round((correctRef.current / totalKeysRef.current) * 100)
@@ -298,27 +314,16 @@ export function useRace() {
     [raceText, emit]
   );
 
-  // ══════════════════════════════════════════════════════════
-  //  6. COMPUTED VALUES
-  // ══════════════════════════════════════════════════════════
-
   const typed = typedRef.current;
-  const elapsed = startTimeRef.current
-    ? (Date.now() - startTimeRef.current) / 1000
-    : 0;
+  const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
   const correctChars = correctRef.current;
   const totalKeys = totalKeysRef.current;
   const wpm = elapsed > 0 ? Math.round((correctChars / 5 / elapsed) * 60) : 0;
-  const accuracy =
-    totalKeys > 0 ? Math.round((correctChars / totalKeys) * 100) : 100;
+  const accuracy = totalKeys > 0 ? Math.round((correctChars / totalKeys) * 100) : 100;
   const progress = raceText
     ? Math.min(Math.round((typed.length / raceText.length) * 100), 100)
     : 0;
   const score = Math.round(wpm * (accuracy / 100) * 10);
-
-  // ══════════════════════════════════════════════════════════
-  //  7. RESTART
-  // ══════════════════════════════════════════════════════════
 
   const restart = useCallback(() => {
     setRaceText("");
@@ -331,49 +336,31 @@ export function useRace() {
     correctRef.current = 0;
     totalKeysRef.current = 0;
     startTimeRef.current = null;
-
-    // Rejoin lobby
     joinLobby(roomId);
   }, [roomId, joinLobby]);
 
-  const logout = useCallback(() => {
-    disconnect();
-    setPlayer(null);
-    setAuthHeaders(null);
-    setRoomId(null);
-    setRoomPlayers([]);
-    setScreen(SCREEN.DASHBOARD);
-  }, [disconnect]);
-
-  // ══════════════════════════════════════════════════════════
-  //  RETURN
-  // ══════════════════════════════════════════════════════════
-
   return {
-    // Screen
     screen,
-
-    // Auth
+    mode,
+    adminToken,
     player,
     authHeaders,
     login,
-    logout,
-
-    // Room
+    loginAdmin,
+    goHome,
+    selectMode,
     roomId,
     roomPlayers,
     roomStatus,
     joinLobby,
+    connectAdmin,
     setReady,
-
-    // Race
+    startRace,
     raceText,
     raceTextId,
     maxDuration,
     startedAt,
     countdownValue,
-
-    // Typing
     typed,
     handleTyping,
     wpm,
@@ -383,16 +370,10 @@ export function useRace() {
     elapsed,
     correctChars,
     totalKeys,
-
-    // Live (other players)
     liveProgress,
-
-    // Results
     raceResults,
     standings,
     restart,
-
-    // Connection
     connected,
   };
 }

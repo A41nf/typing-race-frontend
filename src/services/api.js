@@ -39,6 +39,13 @@ export async function login(playerId, pin) {
   });
 }
 
+export async function adminLogin(password) {
+  return request(API.ADMIN_LOGIN, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
 // ── Players ──
 
 export async function getPlayers() {
@@ -52,6 +59,16 @@ export async function getPlayer(id) {
 export async function updatePlayer(id, playerData, adminToken) {
   return request(API.PLAYER(id), {
     method: "PATCH",
+    headers: {
+      "X-Admin-Token": adminToken,
+    },
+    body: JSON.stringify(playerData),
+  });
+}
+
+export async function createPlayer(playerData, adminToken) {
+  return request(API.PLAYERS, {
+    method: "POST",
     headers: {
       "X-Admin-Token": adminToken,
     },

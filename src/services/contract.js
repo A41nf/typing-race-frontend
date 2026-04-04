@@ -20,6 +20,7 @@ export const SOCKET_URL = `${API_ORIGIN}/race`;
 export const API = {
   HEALTH:           `${API_BASE}/health`,
   AUTH_LOGIN:       `${API_BASE}/auth/login`,
+  ADMIN_LOGIN:      `${API_BASE}/auth/admin-login`,
   PLAYERS:          `${API_BASE}/players`,
   PLAYER:           (id) => `${API_BASE}/players/${id}`,
   RESULTS:          `${API_BASE}/results`,
@@ -37,6 +38,8 @@ export const API = {
 export const EMIT = {
   JOIN_ROOM:       "join_room",
   LEAVE_ROOM:      "leave_room",
+  ADMIN_CONNECT:   "admin_connect",
+  ADMIN_START_RACE: "admin_start_race",
   PLAYER_READY:    "player_ready",
   PLAYER_PROGRESS: "player_progress",
   PLAYER_FINISH:   "player_finish",
@@ -48,6 +51,8 @@ export const ON = {
   ROOM_UPDATE:         "room_update",
   PLAYER_LEFT:         "player_left",
   PLAYER_READY:        "player_ready",
+  ADMIN_PLAYER_JOINED: "admin_player_joined",
+  ADMIN_PLAYER_READY:  "admin_player_ready",
   ALL_READY:           "all_ready",
   COUNTDOWN_TICK:      "countdown_tick",
   RACE_START:          "race_start",
@@ -59,9 +64,12 @@ export const ON = {
 
 // ── Screen States ──
 export const SCREEN = {
-  DASHBOARD: "dashboard",
-  LOBBY:     "lobby",
-  COUNTDOWN: "countdown",
-  RACE:      "race",
-  RESULTS:   "results",
+  LANDING:     "landing",
+  ADMIN_LOGIN: "admin_login",
+  ADMIN_PANEL: "admin_panel",
+  PLAYER_LOGIN: "player_login",
+  LOBBY:       "lobby",
+  COUNTDOWN:   "countdown",
+  RACE:        "race",
+  RESULTS:     "results",
 };
