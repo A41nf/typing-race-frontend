@@ -538,6 +538,42 @@
     }
 
     // ═══════════════════════════════════════════════════════
+    //  ARABIC SENTENCE POOL
+    // ═══════════════════════════════════════════════════════
+
+    const ARABIC_SENTENCES = [
+      "الوقت كالسيف إن لم تقطعه قطعك",
+      "من جد وجد ومن زرع حصد",
+      "العلم في الصغر كالنقش على الحجر",
+      "اطلب العلم من المهد إلى اللحد",
+      "خير الكلام ما قل ودل",
+      "الصديق وقت الضيق",
+      "الصحة تاج على رؤوس الأصحاء لا يراه إلا المرضى",
+      "السماء صافية اليوم والهواء منعش في الصباح الباكر",
+      "الشجرة تُعرف من ثمارها والإنسان من أفعاله",
+      "الرياضة تقوي الجسم وتصفي الذهن وتبني الشخصية",
+      "الحاسوب أداة قوية تساعد الإنسان في جميع مجالات الحياة",
+      "التكنولوجيا غيّرت طريقة تواصل الناس مع بعضهم البعض",
+      "في كل يوم تشرق الشمس تبدأ فرصة جديدة للنجاح",
+      "الأسرة هي الركيزة الأساسية في بناء المجتمع السليم",
+      "المطالعة تفتح آفاقاً جديدة وتثري الفكر والخيال",
+      "لعب الفريق يحتاج إلى ثقة وتعاون بين جميع الأعضاء",
+      "كان التاجر يسير في الصحراء حتى وجد واحة خضراء",
+      "النجاح ليس صدفة بل هو نتيجة العمل الدؤوب والإرادة القوية",
+      "يجب على كل إنسان أن يحترم بيئته ويحافظ على نظافتها",
+      "الماء أصل الحياة والمحافظة عليه واجب على الجميع",
+      "مدرستنا جميلة ونتعلم فيها الكثير من العلوم والمعارف",
+      "القراءة في الصغر تبني عقلاً ناضجاً في الكبر",
+      "كل غيمة لها بطانة فضية وبعد كل عسر يسر",
+      "الإنترنت ربط العالم وجعله قرية صغيرة متقاربة",
+      "الرياح تجري بما لا تشتهي السفن لكن الصبر مفتاح الفرج"
+    ];
+
+    function pickRandomSentence() {
+      return ARABIC_SENTENCES[Math.floor(Math.random() * ARABIC_SENTENCES.length)];
+    }
+
+    // ═══════════════════════════════════════════════════════
     //  SCREEN 2 — LOBBY (Real-time from server)
     // ═══════════════════════════════════════════════════════
 
@@ -627,6 +663,23 @@
       const inputRef = useRef(null);
       const currentId = player.id || player.playerId;
       useEffect(() => { inputRef.current?.focus(); }, []);
+      useEffect(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        const blockPaste = e => e.preventDefault();
+        const blockContext = e => e.preventDefault();
+        const blockPasteKey = e => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') e.preventDefault();
+        };
+        el.addEventListener('paste', blockPaste);
+        el.addEventListener('contextmenu', blockContext);
+        el.addEventListener('keydown', blockPasteKey);
+        return () => {
+          el.removeEventListener('paste', blockPaste);
+          el.removeEventListener('contextmenu', blockContext);
+          el.removeEventListener('keydown', blockPasteKey);
+        };
+      }, []);
 
       const remaining = Math.max(0, maxDuration - elapsed);
       const isFinished = typed.length >= text.length;
@@ -833,7 +886,7 @@
           if (data.status === "finished" || data.status === "waiting") setRaceActive(false);
         });
         s.on("race_start", data => {
-          setRaceText(data.text);
+          setRaceText(pickRandomSentence());
           setMaxDur(data.maxDuration);
           setStartedAt(data.startedAt);
           setPlayers(data.players || []);
@@ -1086,7 +1139,7 @@
           if (data.status === "finished" || data.status === "waiting") setRaceActive(false);
         });
         nextSocket.on("race_start", data => {
-          setRaceText(data.text);
+          setRaceText(pickRandomSentence());
           setMaxDur(data.maxDuration);
           setStartedAt(data.startedAt);
           setPlayers(data.players || []);
