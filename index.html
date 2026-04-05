@@ -325,42 +325,85 @@
     function PlayerLoginScreen({ onLogin, onBack }) {
       const [playerId, setPlayerId] = useState("");
       const [pin, setPin] = useState("");
+      const [guestName, setGuestName] = useState("");
       const [error, setError] = useState("");
-      const [loading, setLoading] = useState(false);
+      const [loginLoading, setLoginLoading] = useState(false);
+      const [guestLoading, setGuestLoading] = useState(false);
 
       const handleLogin = async () => {
         setError("");
-        setLoading(true);
+        setLoginLoading(true);
         try {
           const data = await apiLogin(playerId.trim(), pin);
           onLogin(data.player, data.headers);
         } catch (err) {
           setError(err.message || "خطأ في الاتصال بالخادم");
         } finally {
-          setLoading(false);
+          setLoginLoading(false);
+        }
+      };
+
+      const handleGuestLogin = () => {
+        const name = guestName.trim();
+        if (!name) return;
+        setError("");
+        setGuestLoading(true);
+        try {
+          const guestId = `G${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+          onLogin({
+            playerId: guestId,
+            name,
+            school: "ضيف",
+            avatar: "🧑‍🎓",
+            isGuest: true,
+          });
+        } finally {
+          setGuestLoading(false);
         }
       };
 
       return (
         <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
-          <div className="w-full max-w-md">
+          <div className="w-full max-w-5xl">
             <SchoolHeader subtitle="دخول اللاعب" />
-            <div className="glass-strong rounded-3xl p-8 animate-bounce-in">
-              <div className="mb-4">
-                <label className="block text-sm text-white/60 mb-2 font-medium">رقم اللاعب</label>
-                <input type="text" value={playerId} onChange={e => { setPlayerId(e.target.value.toUpperCase()); setError(""); }} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="مثال: P001" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50" dir="ltr" />
-              </div>
-              <div className="mb-6">
-                <label className="block text-sm text-white/60 mb-2 font-medium">الرمز السري</label>
-                <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="****" maxLength={4} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50 text-lg tracking-widest" dir="ltr" />
-              </div>
-              {error && <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm text-center animate-fade-in">{error}</div>}
-              <div className="flex gap-3">
-                <button onClick={handleLogin} disabled={!playerId || !pin || loading} className="flex-1 py-3.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 disabled:opacity-50 text-white font-bold transition-all duration-200">
-                  {loading ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "دخول"}
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="glass-strong rounded-3xl p-8 animate-bounce-in">
+                <div className="mb-6">
+                  <div className="inline-flex items-center rounded-2xl border border-brand-500/20 bg-brand-500/10 px-3 py-1 text-xs font-bold text-brand-200">الخيار A</div>
+                  <h2 className="mt-3 text-xl font-bold text-white">تسجيل الدخول بالاسم والرقم السري</h2>
+                  <p className="mt-2 text-sm leading-7 text-white/45">الدخول المعتاد للاعبين المسجلين مسبقاً مع التحقق الكامل من بياناتهم قبل الانضمام.</p>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm text-white/60 mb-2 font-medium">رقم اللاعب</label>
+                  <input type="text" value={playerId} onChange={e => { setPlayerId(e.target.value.toUpperCase()); setError(""); }} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="مثال: P001" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50" dir="ltr" />
+                </div>
+                <div className="mb-6">
+                  <label className="block text-sm text-white/60 mb-2 font-medium">الرمز السري</label>
+                  <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="****" maxLength={4} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50 text-lg tracking-widest" dir="ltr" />
+                </div>
+                <button onClick={handleLogin} disabled={!playerId || !pin || loginLoading || guestLoading} className="w-full py-3.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 disabled:opacity-50 text-white font-bold transition-all duration-200">
+                  {loginLoading ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "دخول"}
                 </button>
-                <button onClick={onBack} className="px-5 py-3 rounded-xl bg-white/8 border border-white/10 text-white/80">رجوع</button>
               </div>
+
+              <div className="glass-strong rounded-3xl p-8 animate-bounce-in">
+                <div className="mb-6">
+                  <div className="inline-flex items-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-200">الخيار B</div>
+                  <h2 className="mt-3 text-xl font-bold text-white">الدخول بالاسم فقط</h2>
+                  <p className="mt-2 text-sm leading-7 text-white/45">دخول سريع كضيف دون رقم سري أو تحقق من Firestore، ثم الانضمام مباشرة إلى نفس القاعة.</p>
+                </div>
+                <div className="mb-6">
+                  <label className="block text-sm text-white/60 mb-2 font-medium">اسم اللاعب</label>
+                  <input type="text" value={guestName} onChange={e => { setGuestName(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && handleGuestLogin()} placeholder="اكتب اسمك بالعربية أو الإنجليزية" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/25 focus:border-brand-500/50" dir="auto" />
+                </div>
+                <button onClick={handleGuestLogin} disabled={!guestName.trim() || guestLoading || loginLoading} className="w-full py-3.5 rounded-xl bg-gradient-to-l from-emerald-500 to-emerald-600 disabled:opacity-50 text-white font-bold transition-all duration-200">
+                  {guestLoading ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "دخول كضيف"}
+                </button>
+              </div>
+            </div>
+            {error && <div className="mt-4 mx-auto max-w-2xl p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm text-center animate-fade-in">{error}</div>}
+            <div className="mt-4 flex justify-center">
+              <button onClick={onBack} className="px-5 py-3 rounded-xl bg-white/8 border border-white/10 text-white/80">رجوع</button>
             </div>
           </div>
         </div>
@@ -857,6 +900,15 @@
       const progress = raceText ? Math.min(Math.round((typed.length / raceText.length) * 100), 100) : 0;
       const score = Math.round(wpm * (accuracy / 100) * 10);
 
+      const buildJoinPayload = useCallback((p, extra = {}) => ({
+        playerId: p.id || p.playerId,
+        playerName: p.name,
+        school: p.school,
+        avatar: p.avatar,
+        ...(p.isGuest ? { isGuest: true } : {}),
+        ...extra,
+      }), []);
+
       const connectSocket = useCallback(() => {
         if (socket) return socket;
 
@@ -952,12 +1004,7 @@
         saveSession({ mode: "player", screen: SCREEN.LOBBY, player: p, adminToken: "" });
 
         const joinRoom = () => {
-          s.emit("join_room", {
-            playerId: p.id || p.playerId,
-            playerName: p.name,
-            school: p.school,
-            avatar: p.avatar,
-          }, (ack) => {
+          s.emit("join_room", buildJoinPayload(p), (ack) => {
             if (!ack?.error) {
               setRoomId(ack.roomId);
               setPlayers(ack.players || []);
@@ -967,7 +1014,7 @@
 
         if (s.connected) joinRoom();
         else s.once("connect", joinRoom);
-      }, [connectSocket]);
+      }, [buildJoinPayload, connectSocket]);
 
       const handleAdminLogin = useCallback((token) => {
         const s = connectSocket();
@@ -1002,12 +1049,12 @@
           if (s.connected) rejoin(); else s.once("connect", rejoin);
         } else if (saved.mode === "player" && saved.player) {
           const p = saved.player;
-          const rejoin = () => s.emit("join_room", { playerId: p.id || p.playerId, playerName: p.name, school: p.school, avatar: p.avatar }, (ack) => {
+          const rejoin = () => s.emit("join_room", buildJoinPayload(p), (ack) => {
             if (!ack?.error) { setRoomId(ack.roomId); setPlayers(ack.players || []); }
           });
           if (s.connected) rejoin(); else s.once("connect", rejoin);
         }
-      }, []);
+      }, [buildJoinPayload, connectSocket]);
 
       const handleSavePlayers = useCallback(async (rows) => {
         const existing = await getPlayers();
@@ -1078,14 +1125,14 @@
         startTimeRef.current = null;
         setTyped("");
         if (socket && player) {
-          socket.emit("join_room", { playerId: player.id || player.playerId, playerName: player.name, school: player.school, avatar: player.avatar, roomId }, (ack) => {
+          socket.emit("join_room", buildJoinPayload(player, { roomId }), (ack) => {
             if (!ack?.error) {
               setPlayers(ack.players || []);
               setScreen(SCREEN.LOBBY);
             }
           });
         }
-      }, [socket, player, roomId]);
+      }, [buildJoinPayload, socket, player, roomId]);
 
       const handleAdminNewRace = useCallback(() => {
         const token = adminToken;
