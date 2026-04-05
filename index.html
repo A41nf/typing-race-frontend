@@ -410,7 +410,7 @@
       );
     }
 
-    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, raceText, onSavePlayers, onStartRace, onNewRace, onBack }) {
+    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, raceText, countVal, onSavePlayers, onStartRace, onNewRace, onBack }) {
       const [playerCount, setPlayerCount] = useState(2);
       const [rows, setRows] = useState([
         { id: "P001", name: "", pin: "", school: "شمس المعارف", avatar: "🧑‍🎓" },
@@ -577,7 +577,14 @@
                       <p className="text-sm leading-7 text-white/80">{raceText}</p>
                     </div>
                   )}
-                  <button onClick={onStartRace} disabled={players.length < 2} className="mt-5 w-full py-4 rounded-2xl bg-gradient-to-l from-emerald-500 to-brand-500 text-lg font-black text-white disabled:opacity-40 disabled:cursor-not-allowed">ابدأ السباق</button>
+                  {countVal ? (
+                    <div className="mt-5 w-full py-6 rounded-2xl bg-gradient-to-l from-brand-500/20 to-emerald-500/20 border border-brand-500/30 flex items-center justify-center gap-4">
+                      <span className="text-5xl font-black text-white animate-bounce">{countVal}</span>
+                      <span className="text-lg font-bold text-white/60">العد التنازلي...</span>
+                    </div>
+                  ) : (
+                    <button onClick={onStartRace} disabled={players.length < 2 || raceActive} className="mt-5 w-full py-4 rounded-2xl bg-gradient-to-l from-emerald-500 to-brand-500 text-lg font-black text-white disabled:opacity-40 disabled:cursor-not-allowed">ابدأ السباق</button>
+                  )}
                 </section>
               </div>
             </div>
@@ -1306,7 +1313,7 @@
             {screen === SCREEN.LANDING && <DashboardScreen onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
             {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen onSuccess={handleAdminLogin} onBack={resetApp} />}
             {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen onLogin={handlePlayerLogin} onBack={resetApp} />}
-            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onNewRace={handleAdminNewRace} onBack={resetApp} />}
+            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onNewRace={handleAdminNewRace} onBack={resetApp} />}
             {screen === SCREEN.LOBBY && <LobbyScreen player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
             {screen === SCREEN.COUNTDOWN && <CountdownScreen value={countVal} />}
             {screen === SCREEN.RACE && <RaceScreen player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
