@@ -902,6 +902,11 @@
       const correctRef = useRef(0);
       const totalKeysRef = useRef(0);
       const startTimeRef = useRef(null);
+      const raceEndFallbackRef = useRef(null);
+      const roomPlayersRef = useRef([]);
+      const liveProgressRef = useRef({});
+      const playerRef = useRef(null);
+      const screenRef = useRef(_s?.screen || SCREEN.LANDING);
       const [typed, setTyped] = useState("");
 
       const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
@@ -919,7 +924,59 @@
         ...extra,
       }), []);
 
+      useEffect(() => { roomPlayersRef.current = roomPlayers; }, [roomPlayers]);
+      useEffect(() => { liveProgressRef.current = liveProgress; }, [liveProgress]);
+      useEffect(() => { playerRef.current = player; }, [player]);
+      useEffect(() => { screenRef.current = screen; }, [screen]);
+
+      const clearRaceEndFallback = useCallback(() => {
+        if (raceEndFallbackRef.current) {
+          clearTimeout(raceEndFallbackRef.current);
+          raceEndFallbackRef.current = null;
+        }
+      }, []);
+
+      const buildFallbackStandings = useCallback(() => {
+        const currentPlayer = playerRef.current;
+        const currentId = currentPlayer?.id || currentPlayer?.playerId;
+        const elapsedNow = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
+        const meStats = {
+          wpm: elapsedNow > 0 ? Math.round((correctRef.current / 5 / elapsedNow) * 60) : 0,
+          accuracy: totalKeysRef.current > 0 ? Math.round((correctRef.current / totalKeysRef.current) * 100) : 100,
+          score: elapsedNow > 0 ? Math.round(((correctRef.current / 5 / elapsedNow) * 60) * ((totalKeysRef.current > 0 ? Math.round((correctRef.current / totalKeysRef.current) * 100) : 100) / 100) * 10) : 0,
+          time: elapsedNow,
+          correctChars: correctRef.current,
+          totalKeystrokes: totalKeysRef.current,
+        };
+
+        return roomPlayersRef.current.map((p) => {
+          const stats = p.playerId === currentId
+            ? meStats
+            : (liveProgressRef.current[p.playerId] || {});
+          return {
+            playerId: p.playerId,
+            name: p.name,
+            school: p.school,
+            avatar: p.avatar,
+            finished: !!p.finished || !!stats.finished,
+            progress: stats.progress ?? p.progress ?? 0,
+            stats: {
+              wpm: stats.wpm || 0,
+              accuracy: stats.accuracy || 0,
+              score: stats.score || 0,
+              time: stats.time || maxDuration,
+              correctChars: stats.correctChars || 0,
+              totalKeystrokes: stats.totalKeystrokes || 0,
+            },
+          };
+        }).sort((a, b) => {
+          if (a.finished !== b.finished) return Number(b.finished) - Number(a.finished);
+          return (b.stats?.score || 0) - (a.stats?.score || 0);
+        }).map((entry, index) => ({ ...entry, rank: index + 1 }));
+      }, [maxDuration]);
+
       const applyRaceStart = useCallback((data = {}) => {
+        clearRaceEndFallback();
         setRaceText(data.text || "");
         setMaxDur(data.maxDuration);
         setStartedAt(data.startedAt);
@@ -932,8 +989,15 @@
         setLive({});
         setCountVal(null);
         setRaceActive(true);
+        raceEndFallbackRef.current = setTimeout(() => {
+          if (modeRef.current !== "player") return;
+          if (screenRef.current !== SCREEN.RACE) return;
+          setStandings(prev => prev.length ? prev : buildFallbackStandings());
+          setRaceActive(false);
+          setScreen(SCREEN.RESULTS);
+        }, (data.maxDuration || 120) * 1000 + 500);
         if (modeRef.current === "player") setScreen(SCREEN.RACE);
-      }, []);
+      }, [buildFallbackStandings, clearRaceEndFallback]);
 
       const connectSocket = useCallback(() => {
         if (socket) return socket;
@@ -971,6 +1035,7 @@
           setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), finished: true, ...(data.stats || {}) } }));
         });
         s.on("race_end", data => {
+          clearRaceEndFallback();
           setStandings(data.standings || []);
           setRaceActive(false);
           if (modeRef.current === "player") setScreen(SCREEN.RESULTS);
@@ -979,9 +1044,10 @@
         s.on("error", data => console.error("Socket error:", data.message));
         setSocket(s);
         return s;
-      }, [applyRaceStart, socket]);
+      }, [applyRaceStart, clearRaceEndFallback, socket]);
 
       const resetApp = useCallback(() => {
+        clearRaceEndFallback();
         clearSession();
         socket?.disconnect();
         setSocket(null);
@@ -1006,7 +1072,7 @@
         totalKeysRef.current = 0;
         startTimeRef.current = null;
         setTyped("");
-      }, [socket]);
+      }, [clearRaceEndFallback, socket]);
 
       const handlePlayerLogin = useCallback((p) => {
         const s = connectSocket();
@@ -1128,6 +1194,7 @@
       }, [raceText, socket]);
 
       const handleRestart = useCallback(() => {
+        clearRaceEndFallback();
         clearSession();
         setRaceText("");
         setStandings([]);
@@ -1147,10 +1214,11 @@
             }
           });
         }
-      }, [buildJoinPayload, socket, player, roomId]);
+      }, [buildJoinPayload, clearRaceEndFallback, socket, player, roomId]);
 
       const handleAdminNewRace = useCallback(() => {
         const token = adminToken;
+        clearRaceEndFallback();
         clearSession();
         socket?.disconnect();
         setSocket(null);
@@ -1208,6 +1276,7 @@
           setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), finished: true, ...(data.stats || {}) } }));
         });
         nextSocket.on("race_end", data => {
+          clearRaceEndFallback();
           setStandings(data.standings || []);
           setRaceActive(false);
           if (modeRef.current === "player") setScreen(SCREEN.RESULTS);
@@ -1228,7 +1297,7 @@
 
         if (nextSocket.connected) joinAdmin();
         else nextSocket.once("connect", joinAdmin);
-      }, [adminToken, applyRaceStart, socket]);
+      }, [adminToken, applyRaceStart, clearRaceEndFallback, socket]);
 
       return (
         <div className="font-cairo relative min-h-screen">
