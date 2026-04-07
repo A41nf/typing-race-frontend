@@ -1001,6 +1001,9 @@
           };
         }).sort((a, b) => {
           if (a.finished !== b.finished) return Number(b.finished) - Number(a.finished);
+          if (a.finished && b.finished && (a.stats?.time || 0) !== (b.stats?.time || 0)) {
+            return (a.stats?.time || 0) - (b.stats?.time || 0);
+          }
           return (b.stats?.score || 0) - (a.stats?.score || 0);
         }).map((entry, index) => ({ ...entry, rank: index + 1 }));
       }, [maxDuration]);
@@ -1205,10 +1208,10 @@
       const handleAdminStart = useCallback(() => {
         const text = pickRandomSentence();
         setRaceText(text);
-        socket?.emit("admin_start_race", { adminToken, text }, (ack) => {
+        socket?.emit("admin_start_race", { adminToken, text, roomId }, (ack) => {
           if (ack?.error) console.error("Admin start error:", ack.message);
         });
-      }, [socket, adminToken]);
+      }, [socket, adminToken, roomId]);
 
       const handleTyping = useCallback((newTyped) => {
         if (!raceText) return;
