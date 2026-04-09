@@ -939,6 +939,13 @@
       const screenRef = useRef(_s?.screen || SCREEN.LANDING);
       const [typed, setTyped] = useState("");
 
+      const [, setTick] = useState(0);
+      useEffect(() => {
+        if (!raceActive) return;
+        const id = setInterval(() => setTick(t => t + 1), 1000);
+        return () => clearInterval(id);
+      }, [raceActive]);
+
       const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
       const wpm = elapsed > 0 ? Math.round((correctRef.current / 5 / elapsed) * 60) : 0;
       const accuracy = totalKeysRef.current > 0 ? Math.round((correctRef.current / totalKeysRef.current) * 100) : 100;
@@ -1302,7 +1309,7 @@
           setPlayers(data.players || []);
         });
         nextSocket.on("countdown_tick", data => {
-          setCountVal(data.value);
+          setCountVal(String(data.value));
           if (modeRef.current === "player") setScreen(SCREEN.COUNTDOWN);
         });
         nextSocket.on("room_update", data => {
