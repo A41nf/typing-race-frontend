@@ -1039,10 +1039,7 @@
         if (modeRef.current === "player") setScreen(SCREEN.RACE);
       }, [buildFallbackStandings, clearRaceEndFallback]);
 
-      const connectSocket = useCallback(() => {
-        if (socket) return socket;
-
-        const s = io(SOCKET_URL, { transports: ["websocket"], reconnection: true });
+      const setupListeners = useCallback((s) => {
         s.on("connect", () => setConnected(true));
         s.on("disconnect", () => setConnected(false));
         s.on("room_joined", data => {
@@ -1052,15 +1049,9 @@
             setScreen(SCREEN.RACE_IN_PROGRESS);
           }
         });
-        s.on("player_ready", data => {
-          setPlayers(data.players || []);
-        });
-        s.on("admin_player_joined", data => {
-          setPlayers(data.players || []);
-        });
-        s.on("admin_player_ready", data => {
-          setPlayers(data.players || []);
-        });
+        s.on("player_ready", data => { setPlayers(data.players || []); });
+        s.on("admin_player_joined", data => { setPlayers(data.players || []); });
+        s.on("admin_player_ready", data => { setPlayers(data.players || []); });
         s.on("countdown_tick", data => {
           setCountVal(String(data.value));
           if (modeRef.current === "player") setScreen(SCREEN.COUNTDOWN);
@@ -1091,9 +1082,15 @@
         });
         s.on("player_left", data => setPlayers(data.players || []));
         s.on("error", data => console.error("Socket error:", data.message));
+      }, [applyRaceStart, clearRaceEndFallback]);
+
+      const connectSocket = useCallback(() => {
+        if (socket) return socket;
+        const s = io(SOCKET_URL, { transports: ["websocket"], reconnection: true });
+        setupListeners(s);
         setSocket(s);
         return s;
-      }, [applyRaceStart, clearRaceEndFallback, socket]);
+      }, [setupListeners, socket]);
 
       const resetApp = useCallback(() => {
         clearRaceEndFallback();
@@ -1245,6 +1242,7 @@
       const handleRestart = useCallback(() => {
         clearRaceEndFallback();
         clearSession();
+        setRaceActive(false);
         setRaceText("");
         setStandings([]);
         setLive({});
@@ -1293,45 +1291,7 @@
         setAdminToken(token);
 
         const nextSocket = io(SOCKET_URL, { transports: ["websocket"], reconnection: true });
-        nextSocket.on("connect", () => setConnected(true));
-        nextSocket.on("disconnect", () => setConnected(false));
-        nextSocket.on("room_joined", data => {
-          setRoomId(data.roomId);
-          setPlayers(data.players || []);
-        });
-        nextSocket.on("player_ready", data => {
-          setPlayers(data.players || []);
-        });
-        nextSocket.on("admin_player_joined", data => {
-          setPlayers(data.players || []);
-        });
-        nextSocket.on("admin_player_ready", data => {
-          setPlayers(data.players || []);
-        });
-        nextSocket.on("countdown_tick", data => {
-          setCountVal(String(data.value));
-          if (modeRef.current === "player") setScreen(SCREEN.COUNTDOWN);
-        });
-        nextSocket.on("room_update", data => {
-          setPlayers(data.players || []);
-          if (data.status === "racing") setRaceActive(true);
-          if (data.status === "finished" || data.status === "waiting") setRaceActive(false);
-        });
-        nextSocket.on("race_start", applyRaceStart);
-        nextSocket.on("player_progress", data => {
-          setLive(prev => ({ ...prev, [data.playerId]: { progress: data.progress, wpm: data.wpm, accuracy: data.accuracy, score: data.score, finished: data.finished } }));
-        });
-        nextSocket.on("player_finish", data => {
-          setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), finished: true, ...(data.stats || {}) } }));
-        });
-        nextSocket.on("race_end", data => {
-          clearRaceEndFallback();
-          setStandings(data.standings || []);
-          setRaceActive(false);
-          if (modeRef.current === "player") setScreen(SCREEN.RESULTS);
-        });
-        nextSocket.on("player_left", data => setPlayers(data.players || []));
-        nextSocket.on("error", data => console.error("Socket error:", data.message));
+        setupListeners(nextSocket);
         setSocket(nextSocket);
         saveSession({ mode: "admin", screen: SCREEN.ADMIN_PANEL, adminToken: token, player: null });
 
@@ -1346,7 +1306,7 @@
 
         if (nextSocket.connected) joinAdmin();
         else nextSocket.once("connect", joinAdmin);
-      }, [adminToken, applyRaceStart, clearRaceEndFallback, socket]);
+      }, [adminToken, clearRaceEndFallback, setupListeners, socket]);
 
       return (
         <div className="font-cairo relative min-h-screen">
