@@ -37,6 +37,8 @@
             'fade-in':   'fadeIn 0.4s ease-out',
             'count-pop': 'countPop 0.5s cubic-bezier(0.34,1.56,0.64,1)',
             'glow':      'glow 2s ease-in-out infinite alternate',
+            'screen-soft': 'screenSoft 0.55s cubic-bezier(0.22,1,0.36,1)',
+            'reconnect-pulse': 'reconnectPulse 1.4s ease-in-out infinite',
           },
           keyframes: {
             bounceIn:  { '0%':{transform:'scale(0.3)',opacity:'0'}, '60%':{transform:'scale(1.05)'}, '100%':{transform:'scale(1)',opacity:'1'} },
@@ -44,6 +46,8 @@
             fadeIn:    { '0%':{opacity:'0'}, '100%':{opacity:'1'} },
             countPop:  { '0%':{transform:'scale(0.5)',opacity:'0'}, '60%':{transform:'scale(1.2)'}, '100%':{transform:'scale(1)',opacity:'1'} },
             glow:      { '0%':{boxShadow:'0 0 20px rgba(51,139,255,0.3)'}, '100%':{boxShadow:'0 0 40px rgba(51,139,255,0.6)'} },
+            screenSoft:{ '0%':{transform:'translateY(18px) scale(0.985)',opacity:'0'}, '100%':{transform:'translateY(0) scale(1)',opacity:'1'} },
+            reconnectPulse:{ '0%, 100%':{transform:'scale(1)',opacity:'0.7'}, '50%':{transform:'scale(1.18)',opacity:'1'} },
           },
         },
       },
@@ -72,6 +76,7 @@
     .medal-silver { filter: drop-shadow(0 0 8px rgba(148,163,184,0.6)); }
     .medal-bronze { filter: drop-shadow(0 0 8px rgba(217,119,6,0.6)); }
     .screen-enter { animation: slideUp 0.5s ease-out, fadeIn 0.4s ease-out; }
+    .screen-enter-soft { animation: screenSoft 0.55s cubic-bezier(0.22, 1, 0.36, 1); }
     .entry-card { position: relative; overflow: hidden; isolation: isolate; }
     .entry-card::before {
       content: "";
@@ -178,6 +183,20 @@
     }
     .animate-pulse-ring {
       animation: pulse-ring 1s ease-out forwards;
+    }
+    .animate-reconnect-pulse {
+      animation: reconnectPulse 1.4s ease-in-out infinite;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    @keyframes screenSoft {
+      0% { transform: translateY(18px) scale(0.985); opacity: 0; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    @keyframes reconnectPulse {
+      0%, 100% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(1.18); opacity: 1; }
     }
   </style>
 </head>
@@ -371,6 +390,7 @@
 
     function ProgressBar({ value, max, label }) {
       const pct = Math.min((value / max) * 100, 100);
+      const isActive = value > 1 && value < (max - 1);
       return (
         <div className="glass rounded-xl p-3">
           <div className="flex justify-between text-xs text-white/40 mb-2">
@@ -378,7 +398,7 @@
             <span>{Math.round(pct)}%</span>
           </div>
           <div className="h-3 bg-white/5 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-l from-brand-500 to-brand-400 rounded-full transition-all duration-300 progress-glow" style={{ width: `${pct}%` }}></div>
+            <div className={`h-full bg-gradient-to-l from-brand-500 to-brand-400 rounded-full transition-all duration-300 progress-glow ${isActive ? "animate-pulse" : ""}`} style={{ width: `${pct}%` }}></div>
           </div>
         </div>
       );
@@ -431,7 +451,7 @@
 
     function DashboardScreen({ onSelectMode }) {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter screen-enter-soft">
           <div className="w-full max-w-5xl">
             <SchoolHeader subtitle="إعداد: أ. نصره الراشدية" />
             <TypewriterText />
@@ -463,7 +483,7 @@
       };
 
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter screen-enter-soft">
           <div className="w-full max-w-md">
             <SchoolHeader subtitle="دخول المشرف" />
             <div className="glass-strong rounded-3xl p-8 animate-bounce-in">
@@ -521,7 +541,7 @@
       };
 
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter screen-enter-soft">
           <div className="w-full max-w-5xl">
             <SchoolHeader subtitle="دخول اللاعب" />
             <div className="grid gap-5 md:grid-cols-2">
@@ -619,7 +639,7 @@
       const readyCount = players.filter(player => player.ready).length;
 
       return (
-        <div className="min-h-screen p-4 screen-enter">
+        <div className="min-h-screen p-4 screen-enter screen-enter-soft">
           <div className="max-w-6xl mx-auto">
             <SchoolHeader subtitle="لوحة تحكم المشرف" />
             <div className="mb-4">
@@ -657,7 +677,13 @@
                     <div className="flex-1 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-center"><div className="text-3xl font-black text-white">{readyCount}</div><div className="text-sm text-white/50">جاهزون</div></div>
                   </div>
                   <div className="mt-5 space-y-2">
-                    {players.length === 0 && <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/40">لا يوجد لاعبون متصلون بعد.</div>}
+                    {players.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.04] p-5 text-center">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand-500/20 bg-brand-500/10 text-2xl text-brand-300">🛰️</div>
+                        <p className="text-sm font-semibold text-white/75">لا يوجد لاعبون متصلون بعد</p>
+                        <p className="mt-1 text-xs leading-6 text-white/40">سيظهر اللاعبون هنا فور تسجيل الدخول إلى القاعة.</p>
+                      </div>
+                    )}
                     {players.map(player => (
                       <div key={player.playerId} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
                         <span className="text-2xl">{player.avatar || "🧑‍🎓"}</span>
@@ -796,7 +822,7 @@
       const allReady = players.length >= 2 && players.every(p => p.ready);
 
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter screen-enter-soft">
           <div className="w-full max-w-lg">
             <SchoolHeader subtitle="قاعة الانتظار" />
             <div className="glass-strong rounded-3xl p-6 animate-bounce-in">
@@ -834,7 +860,13 @@
               )}
               {myReady && !allReady && <div className="text-center text-emerald-400 text-sm font-medium animate-pulse">⏳ في انتظار باقي اللاعبين...</div>}
               {myReady && allReady && <div className="text-center text-brand-300 text-sm font-medium animate-pulse">⏳ الجميع جاهز، بانتظار المشرف لبدء العد التنازلي...</div>}
-              {players.length < 2 && <div className="text-center text-white/30 text-sm">⏳ في انتظار لاعبين آخرين...</div>}
+              {players.length < 2 && (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.04] p-4 text-center">
+                  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-xl text-emerald-300">⏳</div>
+                  <p className="text-sm font-semibold text-white/75">في انتظار لاعبين آخرين</p>
+                  <p className="mt-1 text-xs leading-6 text-white/40">يحتاج السباق إلى لاعبين اثنين على الأقل قبل تفعيل الجاهزية.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -847,7 +879,7 @@
 
     function CountdownScreen({ value }) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a]">
+        <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a] screen-enter screen-enter-soft">
           <div className="text-center">
             <div className="relative w-64 h-64 mx-auto flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-2 border-brand-500/10 animate-ping" style={{animationDuration:"2s"}}></div>
@@ -922,7 +954,7 @@
       }, [roomPlayers, liveProgress, currentId, progress, wpm]);
 
       return (
-        <div className="min-h-screen flex flex-col p-3 md:p-6 screen-enter">
+        <div className="min-h-screen flex flex-col p-3 md:p-6 screen-enter screen-enter-soft">
           <div className="md:hidden mb-4 -mx-1 px-1 overflow-x-auto">
             <div className="flex gap-2 min-w-max">
               {leaderboard.map((p) => (
@@ -1010,7 +1042,7 @@
       ];
 
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 screen-enter">
+        <div className="min-h-screen flex items-center justify-center p-4 screen-enter screen-enter-soft">
           <div className="w-full max-w-4xl">
             <SchoolHeader subtitle="النتائج النهائية" />
             <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -1118,7 +1150,7 @@
     // ─────────────────────────────────────────────────────────
     function RaceInProgressScreen() {
       return (
-        <div dir="rtl" className="min-h-screen flex items-center justify-center bg-[#0a0e1a] px-4">
+        <div dir="rtl" className="min-h-screen flex items-center justify-center bg-[#0a0e1a] px-4 screen-enter screen-enter-soft">
           <div className="text-center max-w-md">
             <div className="text-6xl mb-6 animate-bounce">🏁</div>
             <h1 className="text-3xl font-black text-white mb-4">السباق جارٍ الآن</h1>
@@ -1566,17 +1598,26 @@
         <div className="font-cairo relative min-h-screen">
           <BGDecor />
           <div className="relative z-10">
-            {screen === SCREEN.LANDING && <DashboardScreen onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
-            {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen onSuccess={handleAdminLogin} onBack={resetApp} />}
-            {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen onLogin={handlePlayerLogin} onBack={resetApp} />}
-            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onNewRace={handleAdminNewRace} onBack={resetApp} />}
-            {screen === SCREEN.LOBBY && <LobbyScreen player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
-            {screen === SCREEN.RACE_IN_PROGRESS && <RaceInProgressScreen />}
-            {screen === SCREEN.COUNTDOWN && <CountdownScreen value={countVal} />}
-            {screen === SCREEN.RACE && <RaceScreen player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
-            {screen === SCREEN.RESULTS && <ResultsScreen player={player} results={{ wpm, accuracy, score, time: elapsed, correctChars: correctRef.current, totalKeys: totalKeysRef.current }} standings={standings} onRestart={handleRestart} onEndSession={resetApp} onBackToHome={resetApp} />}
+            {screen === SCREEN.LANDING && <DashboardScreen key={screen} onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
+            {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen key={screen} onSuccess={handleAdminLogin} onBack={resetApp} />}
+            {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen key={screen} onLogin={handlePlayerLogin} onBack={resetApp} />}
+            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen key={screen} adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onNewRace={handleAdminNewRace} onBack={resetApp} />}
+            {screen === SCREEN.LOBBY && <LobbyScreen key={screen} player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
+            {screen === SCREEN.RACE_IN_PROGRESS && <RaceInProgressScreen key={screen} />}
+            {screen === SCREEN.COUNTDOWN && <CountdownScreen key={screen} value={countVal} />}
+            {screen === SCREEN.RACE && <RaceScreen key={screen} player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
+            {screen === SCREEN.RESULTS && <ResultsScreen key={screen} player={player} results={{ wpm, accuracy, score, time: elapsed, correctChars: correctRef.current, totalKeys: totalKeysRef.current }} standings={standings} onRestart={handleRestart} onEndSession={resetApp} onBackToHome={resetApp} />}
             {!connected && ![SCREEN.LANDING, SCREEN.ADMIN_LOGIN, SCREEN.PLAYER_LOGIN].includes(screen) && (
-              <div className="fixed top-4 left-4 z-50 bg-rose-500/20 border border-rose-500/30 rounded-xl px-4 py-2 text-sm text-rose-400 animate-pulse">⚠️ جاري إعادة الاتصال...</div>
+              <div className="fixed top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-amber-400/25 bg-[#120f08]/85 px-4 py-3 text-sm text-amber-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl animate-slide-up">
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inset-0 rounded-full bg-amber-300/40 animate-ping"></span>
+                  <span className="relative h-3 w-3 rounded-full bg-amber-300 animate-reconnect-pulse"></span>
+                </span>
+                <div className="leading-5">
+                  <p className="font-bold text-amber-100">الاتصال غير مستقر</p>
+                  <p className="text-xs text-amber-100/70">جاري إعادة الاتصال بالخادم تلقائياً...</p>
+                </div>
+              </div>
             )}
           </div>
         </div>
