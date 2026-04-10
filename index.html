@@ -588,7 +588,7 @@
       );
     }
 
-    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, raceText, countVal, onSavePlayers, onStartRace, onNewRace, onBack }) {
+    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, raceText, countVal, onSavePlayers, onStartRace, onKickPlayer, onNewRace, onBack }) {
       const [playerCount, setPlayerCount] = useState(2);
       const [rows, setRows] = useState([
         { id: "P001", name: "", pin: "", school: "شمس المعارف", avatar: "🧑‍🎓" },
@@ -692,6 +692,16 @@
                           <div className="text-xs text-white/35" dir="ltr">{player.playerId}</div>
                         </div>
                         <div className={`rounded-xl px-3 py-1 text-xs font-bold ${player.ready ? "border border-emerald-500/20 bg-emerald-500/15 text-emerald-300" : "border border-white/10 bg-white/5 text-white/40"}`}>{player.ready ? "جاهز" : "بانتظار"}</div>
+                        <button
+                          onClick={() => {
+                            if (!confirm('هل تريد طرد هذا اللاعب؟')) return;
+                            onKickPlayer(player.playerId);
+                          }}
+                          className="flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-lg text-rose-200 transition hover:bg-rose-500/20"
+                          title="طرد اللاعب"
+                        >
+                          🚫
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -710,6 +720,16 @@
                               <span className="text-2xl">{p.avatar || "🧑‍🎓"}</span>
                               <div className="flex-1"><div className="font-semibold text-white">{p.name}</div></div>
                               {stats.finished && <span className="rounded-xl border border-amber-400/30 bg-amber-400/15 px-3 py-1 text-xs font-bold text-amber-200">أنهى</span>}
+                              <button
+                                onClick={() => {
+                                  if (!confirm('هل تريد طرد هذا اللاعب؟')) return;
+                                  onKickPlayer(p.playerId);
+                                }}
+                                className="flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-lg text-rose-200 transition hover:bg-rose-500/20"
+                                title="طرد اللاعب"
+                              >
+                                🚫
+                              </button>
                             </div>
                             <div className="mt-3">
                               <div className="flex justify-between text-xs text-white/55 mb-1"><span>التقدم</span><span>{pct}%</span></div>
@@ -1024,7 +1044,7 @@
     //  SCREEN 5 — RESULTS (Server standings)
     // ═══════════════════════════════════════════════════════
 
-    function ResultsScreen({ player, results, standings, onRestart, onEndSession, onBackToHome }) {
+    function ResultsScreen({ player, results, standings, isFinal, onRestart, onEndSession, onBackToHome }) {
       const currentId = player.id || player.playerId;
       const myRank = standings.findIndex(s => s.playerId === currentId) + 1;
       const MEDALS = ["🥇", "🥈", "🥉"];
@@ -1063,6 +1083,11 @@
                   <div className="h-4 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-l from-emerald-400 to-brand-400 rounded-full transition-all duration-1000 progress-glow" style={{ width: `${Math.min((results.wpm / 60) * 100, 100)}%` }}></div></div>
                   <div className="flex justify-between text-[10px] text-white/20 mt-1"><span>0</span><span>30</span><span>60+</span></div>
                 </div>
+                {!isFinal && (
+                  <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm font-medium text-amber-100">
+                    في انتظار انتهاء باقي اللاعبين... سيتم تحديث النتائج النهائية تلقائياً.
+                  </div>
+                )}
               </div>
 
               <div className="glass-strong rounded-2xl p-4 mb-4 animate-slide-up" style={{animationDelay:"200ms"}}>
@@ -1133,13 +1158,17 @@
                 </div>
               </div>
             </div>
-            <div className="animate-slide-up" style={{animationDelay:"800ms"}}>
-              <button onClick={onRestart} className="w-full py-3.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white font-bold transition-all duration-200 shadow-lg shadow-brand-500/20 active:scale-[0.98]">سباق جديد</button>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2 animate-slide-up" style={{animationDelay:"900ms"}}>
-              <button onClick={onEndSession} className="w-full py-3.5 rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-200 font-bold transition-all duration-200 hover:bg-rose-500/15">إنهاء الجلسة</button>
-              <button onClick={onBackToHome} className="w-full py-3.5 rounded-xl bg-white/8 border border-white/10 text-white/85 font-bold transition-all duration-200 hover:bg-white/10">العودة للرئيسية</button>
-            </div>
+            {isFinal && (
+              <>
+                <div className="animate-slide-up" style={{animationDelay:"800ms"}}>
+                  <button onClick={onRestart} className="w-full py-3.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white font-bold transition-all duration-200 shadow-lg shadow-brand-500/20 active:scale-[0.98]">سباق جديد</button>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2 animate-slide-up" style={{animationDelay:"900ms"}}>
+                  <button onClick={onEndSession} className="w-full py-3.5 rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-200 font-bold transition-all duration-200 hover:bg-rose-500/15">إنهاء الجلسة</button>
+                  <button onClick={onBackToHome} className="w-full py-3.5 rounded-xl bg-white/8 border border-white/10 text-white/85 font-bold transition-all duration-200 hover:bg-white/10">العودة للرئيسية</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       );
@@ -1210,6 +1239,7 @@
       const [startedAt, setStartedAt] = useState(null);
       const [liveProgress, setLive] = useState({});
       const [standings, setStandings] = useState([]);
+      const [resultsFinal, setResultsFinal] = useState(false);
 
       const typedRef = useRef("");
       const correctRef = useRef(0);
@@ -1219,6 +1249,7 @@
       const roomPlayersRef = useRef([]);
       const liveProgressRef = useRef({});
       const playerRef = useRef(null);
+      const resetAppRef = useRef(() => {});
       const screenRef = useRef(_s?.screen || SCREEN.LANDING);
       const [typed, setTyped] = useState("");
 
@@ -1310,12 +1341,15 @@
         startTimeRef.current = null;
         setTyped("");
         setLive({});
+        setStandings([]);
+        setResultsFinal(false);
         setCountVal(null);
         setRaceActive(true);
         raceEndFallbackRef.current = setTimeout(() => {
           if (modeRef.current !== "player") return;
           if (screenRef.current !== SCREEN.RACE) return;
           setStandings(prev => prev.length ? prev : buildFallbackStandings());
+          setResultsFinal(true);
           setRaceActive(false);
           setScreen(SCREEN.RESULTS);
         }, (data.maxDuration || 120) * 1000 + 500);
@@ -1349,20 +1383,35 @@
           setLive(prev => ({ ...prev, [data.playerId]: { progress: data.progress, wpm: data.wpm, accuracy: data.accuracy, score: data.score, finished: data.finished } }));
         });
         s.on("player_finish", data => {
-          setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), finished: true, ...(data.stats || {}) } }));
-        });
-        s.on("race_end", data => {
-          clearRaceEndFallback();
-          setStandings(data.standings || []);
-          setRaceActive(false);
-          if (modeRef.current === "player") {
-            if (screenRef.current === SCREEN.RACE_IN_PROGRESS) {
-              setScreen(SCREEN.LOBBY);
-            } else {
+          setLive(prev => ({ ...prev, [data.playerId]: { ...(prev[data.playerId] || {}), progress: 100, finished: true, ...(data.stats || {}) } }));
+          const currentPlayer = playerRef.current;
+          const currentPlayerId = currentPlayer?.id || currentPlayer?.playerId;
+          const isOwnFinish = data.playerId === currentPlayerId || data.socketId === s.id;
+          if (isOwnFinish) {
+            if (Array.isArray(data.standings)) {
+              setStandings(data.standings);
+            }
+            setResultsFinal(false);
+            setRaceActive(false);
+            if (modeRef.current === "player" && [SCREEN.RACE, SCREEN.RACE_IN_PROGRESS].includes(screenRef.current)) {
               setScreen(SCREEN.RESULTS);
             }
           }
         });
+        s.on("race_end", data => {
+          clearRaceEndFallback();
+          setStandings(data.standings || []);
+          setResultsFinal(true);
+          setRaceActive(false);
+          if (modeRef.current === "player") {
+            setScreen(SCREEN.RESULTS);
+          }
+        });
+        s.on("player_kicked", data => {
+          alert(data?.reason || "تم طردك من قِبل المشرف");
+          resetAppRef.current(SCREEN.PLAYER_LOGIN);
+        });
+        s.on("admin_player_kicked", data => { setPlayers(data.players || []); });
         s.on("player_left", data => setPlayers(data.players || []));
         s.on("error", data => console.error("Socket error:", data.message));
       }, [applyRaceStart, clearRaceEndFallback]);
@@ -1375,13 +1424,13 @@
         return s;
       }, [setupListeners, socket]);
 
-      const resetApp = useCallback(() => {
+      const resetApp = useCallback((nextScreen = SCREEN.LANDING) => {
         clearRaceEndFallback();
         clearSession();
         socket?.disconnect();
         setSocket(null);
         setConnected(false);
-        setScreen(SCREEN.LANDING);
+        setScreen(nextScreen);
         setMode(null);
         modeRef.current = null;
         setRaceActive(false);
@@ -1396,12 +1445,17 @@
         setStartedAt(null);
         setLive({});
         setStandings([]);
+        setResultsFinal(false);
         typedRef.current = "";
         correctRef.current = 0;
         totalKeysRef.current = 0;
         startTimeRef.current = null;
         setTyped("");
       }, [clearRaceEndFallback, socket]);
+
+      useEffect(() => {
+        resetAppRef.current = resetApp;
+      }, [resetApp]);
 
       const handlePlayerLogin = useCallback((p) => {
         const s = connectSocket();
@@ -1500,6 +1554,15 @@
         });
       }, [socket, adminToken, roomId]);
 
+      const handleAdminKickPlayer = useCallback((playerId) => {
+        if (!socket || !adminToken || !playerId) return;
+        socket.emit("admin_kick_player", { adminToken, playerId, roomId }, (ack) => {
+          if (!ack?.error) {
+            setPlayers(ack.players || []);
+          }
+        });
+      }, [socket, adminToken, roomId]);
+
       const handleTyping = useCallback((newTyped) => {
         if (!raceText) return;
         const prevLen = typedRef.current.length;
@@ -1534,6 +1597,7 @@
         setLive({});
         setCountVal(null);
         setMyReady(false);
+        setResultsFinal(false);
         typedRef.current = "";
         correctRef.current = 0;
         totalKeysRef.current = 0;
@@ -1566,6 +1630,7 @@
         setStartedAt(null);
         setLive({});
         setStandings([]);
+        setResultsFinal(false);
         typedRef.current = "";
         correctRef.current = 0;
         totalKeysRef.current = 0;
@@ -1601,12 +1666,12 @@
             {screen === SCREEN.LANDING && <DashboardScreen key={screen} onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
             {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen key={screen} onSuccess={handleAdminLogin} onBack={resetApp} />}
             {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen key={screen} onLogin={handlePlayerLogin} onBack={resetApp} />}
-            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen key={screen} adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onNewRace={handleAdminNewRace} onBack={resetApp} />}
+            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen key={screen} adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onKickPlayer={handleAdminKickPlayer} onNewRace={handleAdminNewRace} onBack={resetApp} />}
             {screen === SCREEN.LOBBY && <LobbyScreen key={screen} player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
             {screen === SCREEN.RACE_IN_PROGRESS && <RaceInProgressScreen key={screen} />}
             {screen === SCREEN.COUNTDOWN && <CountdownScreen key={screen} value={countVal} />}
             {screen === SCREEN.RACE && <RaceScreen key={screen} player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} />}
-            {screen === SCREEN.RESULTS && <ResultsScreen key={screen} player={player} results={{ wpm, accuracy, score, time: elapsed, correctChars: correctRef.current, totalKeys: totalKeysRef.current }} standings={standings} onRestart={handleRestart} onEndSession={resetApp} onBackToHome={resetApp} />}
+            {screen === SCREEN.RESULTS && <ResultsScreen key={screen} player={player} results={{ wpm, accuracy, score, time: elapsed, correctChars: correctRef.current, totalKeys: totalKeysRef.current }} standings={standings} isFinal={resultsFinal} onRestart={handleRestart} onEndSession={resetApp} onBackToHome={resetApp} />}
             {!connected && ![SCREEN.LANDING, SCREEN.ADMIN_LOGIN, SCREEN.PLAYER_LOGIN].includes(screen) && (
               <div className="fixed top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-amber-400/25 bg-[#120f08]/85 px-4 py-3 text-sm text-amber-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl animate-slide-up">
                 <span className="relative flex h-3 w-3">
