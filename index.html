@@ -1373,6 +1373,12 @@
           setCountVal(String(data.value));
           if (modeRef.current === "player") setScreen(SCREEN.COUNTDOWN);
         });
+        s.on("race_start_failed", () => {
+          setRaceText("");
+          if (screenRef.current === SCREEN.RACE || screenRef.current === SCREEN.COUNTDOWN) {
+            setScreen(SCREEN.LOBBY);
+          }
+        });
         s.on("room_update", data => {
           setPlayers(data.players || []);
           if (data.status === "racing") setRaceActive(true);
@@ -1548,9 +1554,13 @@
 
       const handleAdminStart = useCallback(() => {
         const text = pickRandomSentence();
-        setRaceText(text);
         socket?.emit("admin_start_race", { adminToken, text, roomId }, (ack) => {
-          if (ack?.error) console.error("Admin start error:", ack.message);
+          if (ack?.error) {
+            console.error("Admin start error:", ack.message);
+            if (ack.error === "INVALID_STATE") alert("السباق بدأ بالفعل");
+          } else {
+            setRaceText(text);
+          }
         });
       }, [socket, adminToken, roomId]);
 
