@@ -318,6 +318,34 @@
     //  UI COMPONENTS
     // ═══════════════════════════════════════════════════════
 
+    function AdminMessagePopup({ message, onDismiss }) {
+      useEffect(() => {
+        const timer = setTimeout(onDismiss, 8000);
+        return () => clearTimeout(timer);
+      }, [onDismiss]);
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="glass-strong rounded-3xl border border-brand-500/30 p-8 max-w-md w-full animate-bounce-in">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-2xl">📢</div>
+              <div>
+                <h2 className="text-xl font-bold text-white">رسالة من المشرف</h2>
+                <p className="text-xs text-white/40 mt-0.5">ستُغلق تلقائياً خلال 8 ثوانٍ</p>
+              </div>
+            </div>
+            <p className="text-white/85 text-lg leading-8 text-right mb-6">{message}</p>
+            <button
+              onClick={onDismiss}
+              className="w-full py-3 rounded-xl bg-gradient-to-l from-brand-500 to-brand-600 text-white font-bold hover:from-brand-400 hover:to-brand-500 transition-all duration-200"
+            >
+              تم الفهم
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     function BGDecor() {
       const dots = [
         { top: "12%", left: "14%", size: 10, color: "rgba(89,173,255,0.28)", duration: "12s", delay: "0s" },
@@ -588,7 +616,7 @@
       );
     }
 
-    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, raceText, countVal, onSavePlayers, onStartRace, onKickPlayer, onNewRace, onBack }) {
+    function AdminPanelScreen({ adminToken, players, liveProgress, raceActive, standings, raceText, countVal, onSavePlayers, onStartRace, onKickPlayer, onNewRace, onBack, onBroadcast }) {
       const [playerCount, setPlayerCount] = useState(2);
       const [rows, setRows] = useState([
         { id: "P001", name: "", pin: "", school: "شمس المعارف", avatar: "🧑‍🎓" },
@@ -597,6 +625,7 @@
       const [saving, setSaving] = useState(false);
       const [message, setMessage] = useState("");
       const [error, setError] = useState("");
+      const [broadcastMsg, setBroadcastMsg] = useState("");
 
       function buildRows(count, currentRows = rows) {
         return Array.from({ length: count }, (_, index) => {
@@ -789,6 +818,24 @@
                   ) : (
                     <button onClick={onStartRace} disabled={players.length < 2 || raceActive} className="mt-5 w-full py-4 rounded-2xl bg-gradient-to-l from-emerald-500 to-brand-500 text-lg font-black text-white disabled:opacity-40 disabled:cursor-not-allowed">ابدأ السباق</button>
                   )}
+                </section>
+                <section className="glass-strong rounded-3xl p-6">
+                  <h2 className="text-xl font-bold text-white">البث للاعبين</h2>
+                  <p className="text-sm text-white/45 mt-1">إرسال رسالة تنبيهية منبثقة لجميع اللاعبين المتصلين.</p>
+                  <textarea
+                    value={broadcastMsg}
+                    onChange={e => setBroadcastMsg(e.target.value)}
+                    placeholder="اكتب رسالتك هنا..."
+                    rows={3}
+                    className="mt-4 w-full rounded-2xl bg-white/5 border border-white/10 p-4 text-white placeholder:text-white/25 focus:border-amber-500/50 resize-none"
+                  />
+                  <button
+                    onClick={() => { if (broadcastMsg.trim()) { onBroadcast(broadcastMsg); setBroadcastMsg(""); } }}
+                    disabled={!broadcastMsg.trim()}
+                    className="mt-3 w-full py-3 rounded-xl bg-gradient-to-l from-amber-500 to-amber-600 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:from-amber-400 hover:to-amber-500 transition-all duration-200"
+                  >
+                    إرسال الرسالة 📢
+                  </button>
                 </section>
               </div>
             </div>
@@ -1240,6 +1287,7 @@
       const [liveProgress, setLive] = useState({});
       const [standings, setStandings] = useState([]);
       const [resultsFinal, setResultsFinal] = useState(false);
+      const [adminMsg, setAdminMsg] = useState(null);
 
       const typedRef = useRef("");
       const correctRef = useRef(0);
@@ -1419,6 +1467,9 @@
         });
         s.on("admin_player_kicked", data => { setPlayers(data.players || []); });
         s.on("player_left", data => setPlayers(data.players || []));
+        s.on("admin_broadcast_msg", data => {
+          setAdminMsg(data.message);
+        });
         s.on("error", data => console.error("Socket error:", data.message));
       }, [applyRaceStart, clearRaceEndFallback]);
 
@@ -1573,6 +1624,13 @@
         });
       }, [socket, adminToken, roomId]);
 
+      const handleAdminBroadcast = useCallback((message) => {
+        if (!socket || !adminToken || !message.trim()) return;
+        socket.emit("admin_broadcast", { adminToken, roomId, message: message.trim() }, (ack) => {
+          if (ack?.error) console.error("Broadcast error:", ack.message);
+        });
+      }, [socket, adminToken, roomId]);
+
       const handleTyping = useCallback((newTyped) => {
         if (!raceText) return;
         const prevLen = typedRef.current.length;
@@ -1676,12 +1734,13 @@
             {screen === SCREEN.LANDING && <DashboardScreen key={screen} onSelectMode={(nextMode) => { setMode(nextMode); setScreen(nextMode === "admin" ? SCREEN.ADMIN_LOGIN : SCREEN.PLAYER_LOGIN); }} />}
             {screen === SCREEN.ADMIN_LOGIN && <AdminLoginScreen key={screen} onSuccess={handleAdminLogin} onBack={resetApp} />}
             {screen === SCREEN.PLAYER_LOGIN && <PlayerLoginScreen key={screen} onLogin={handlePlayerLogin} onBack={resetApp} />}
-            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen key={screen} adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onKickPlayer={handleAdminKickPlayer} onNewRace={handleAdminNewRace} onBack={resetApp} />}
+            {screen === SCREEN.ADMIN_PANEL && <AdminPanelScreen key={screen} adminToken={adminToken} players={roomPlayers} liveProgress={liveProgress} raceActive={raceActive} standings={standings} raceText={raceText} countVal={countVal} onSavePlayers={handleSavePlayers} onStartRace={handleAdminStart} onKickPlayer={handleAdminKickPlayer} onNewRace={handleAdminNewRace} onBack={resetApp} onBroadcast={handleAdminBroadcast} />}
             {screen === SCREEN.LOBBY && <LobbyScreen key={screen} player={player} players={roomPlayers} myReady={myReady} onReady={handleReady} />}
             {screen === SCREEN.RACE_IN_PROGRESS && <RaceInProgressScreen key={screen} />}
             {screen === SCREEN.COUNTDOWN && <CountdownScreen key={screen} value={countVal} />}
             {screen === SCREEN.RACE && <RaceScreen key={screen} player={player} text={raceText} typed={typed} onChange={handleTyping} wpm={wpm} accuracy={accuracy} progress={progress} score={score} elapsed={elapsed} maxDuration={maxDuration} liveProgress={liveProgress} roomPlayers={roomPlayers} onProceedToResults={() => { setScreen(SCREEN.RESULTS); setResultsFinal(true); }} />}
             {screen === SCREEN.RESULTS && <ResultsScreen key={screen} player={player} results={{ wpm, accuracy, score, time: elapsed, correctChars: correctRef.current, totalKeys: totalKeysRef.current }} standings={standings} isFinal={resultsFinal} onRestart={handleRestart} onEndSession={resetApp} onBackToHome={resetApp} />}
+            {adminMsg && <AdminMessagePopup message={adminMsg} onDismiss={() => setAdminMsg(null)} />}
             {!connected && ![SCREEN.LANDING, SCREEN.ADMIN_LOGIN, SCREEN.PLAYER_LOGIN].includes(screen) && (
               <div className="fixed top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-amber-400/25 bg-[#120f08]/85 px-4 py-3 text-sm text-amber-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl animate-slide-up">
                 <span className="relative flex h-3 w-3">
