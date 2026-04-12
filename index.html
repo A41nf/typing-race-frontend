@@ -1548,6 +1548,10 @@
             if (!ack?.error) {
               setRoomId(ack.roomId);
               setPlayers(ack.players || []);
+              if (ack.status === "racing" || ack.status === "countdown") {
+                setRaceActive(true);
+                if (ack.text) setRaceText(ack.text);
+              }
             }
           });
         };
@@ -1563,7 +1567,14 @@
         const s = connectSocket();
         if (saved.mode === "admin" && saved.adminToken) {
           const rejoin = () => s.emit("admin_connect", { token: saved.adminToken }, (ack) => {
-            if (!ack?.error) { setRoomId(ack.roomId); setPlayers(ack.players || []); }
+            if (!ack?.error) {
+              setRoomId(ack.roomId);
+              setPlayers(ack.players || []);
+              if (ack.status === "racing" || ack.status === "countdown") {
+                setRaceActive(true);
+                if (ack.text) setRaceText(ack.text);
+              }
+            }
           });
           if (s.connected) rejoin(); else s.once("connect", rejoin);
         } else if (saved.mode === "player" && saved.player) {
@@ -1719,6 +1730,10 @@
             if (!ack?.error) {
               setRoomId(ack.roomId);
               setPlayers(ack.players || []);
+              if (ack.status === "racing" || ack.status === "countdown") {
+                setRaceActive(true);
+                if (ack.text) setRaceText(ack.text);
+              }
             }
           });
         };
